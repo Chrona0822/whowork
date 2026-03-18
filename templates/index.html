@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Job Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f2f5;
+      color: #222;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    #sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: #1a2535;
+      color: #b8c8d8;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    #sidebar-title {
+      padding: 18px 16px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #607080;
+      border-bottom: 1px solid #263040;
+    }
+    .run-link {
+      display: block;
+      padding: 11px 16px;
+      border-bottom: 1px solid #212f40;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      transition: background .15s;
+    }
+    .run-link:hover   { background: #263040; }
+    .run-link.active  { background: #2563eb; color: #fff; }
+    .run-date  { font-size: 13px; font-weight: 600; }
+    .run-meta  { font-size: 11px; margin-top: 3px; opacity: .7; }
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-right: 4px;
+      text-transform: uppercase;
+    }
+    .badge-sweden { background: #006AA7; color: #fff; }
+    .badge-eu     { background: #003399; color: #fff; }
+    .badge-all    { background: #374151; color: #fff; }
+
+    /* ── Main ────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+    #main h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1a2535;
+      margin-bottom: 18px;
+    }
+
+    /* Stats */
+    .stats { display: flex; gap: 14px; margin-bottom: 22px; }
+    .stat {
+      background: #fff;
+      border-radius: 8px;
+      padding: 12px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      min-width: 90px;
+    }
+    .stat strong { display: block; font-size: 24px; color: #1a2535; }
+    .stat span   { font-size: 12px; color: #888; }
+
+    /* Table */
+    .table-wrap {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: #1a2535;
+      color: #fff;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #fafafa; }
+    tbody tr.applied td { opacity: .35; }
+    tbody tr.applied td.action-cell { opacity: 1; }
+    td {
+      padding: 9px 14px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    td.title-cell { font-weight: 500; max-width: 260px; }
+    td a { color: #2563eb; text-decoration: none; }
+    td a:hover { text-decoration: underline; }
+
+    /* Toggle button */
+    .toggle-btn {
+      padding: 4px 11px;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s;
+    }
+    .toggle-btn.pending { background: #eff6ff; color: #2563eb; }
+    .toggle-btn.pending:hover { background: #dbeafe; }
+    .toggle-btn.done    { background: #d1fae5; color: #059669; }
+    .toggle-btn.done:hover { background: #a7f3d0; }
+
+    /* Empty state */
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 70vh;
+      color: #999;
+      gap: 10px;
+    }
+    .empty p { font-size: 15px; }
+    .empty code {
+      background: #f0f2f5;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────── -->
+<nav id="sidebar">
+  <div id="sidebar-title">Search Runs</div>
+
+  {% if not runs %}
+    <div style="padding:16px;font-size:12px;opacity:.5">
+      No runs yet.<br>Use !jobsv or !jobeu in Discord.
+    </div>
+  {% endif %}
+
+  {% for run in runs %}
+  <a class="run-link {% if selected and run.id == selected.id %}active{% endif %}"
+     href="/run/{{ run.id }}">
+    <div class="run-date">{{ run.timestamp }}</div>
+    <div class="run-meta">
+      <span class="badge badge-{{ run.region }}">{{ run.region }}</span>
+      {{ run.count }} job(s)
+    </div>
+  </a>
+  {% endfor %}
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────── -->
+<main id="main">
+  {% if selected %}
+    {% set applied_count = jobs | selectattr("applied", "equalto", 1) | list | length %}
+    {% set total = jobs | length %}
+
+    <h1>{{ selected.timestamp }} &nbsp;<span style="font-weight:400;color:#888;font-size:14px">{{ selected.region | upper }}</span></h1>
+
+    <div class="stats">
+      <div class="stat"><strong>{{ total }}</strong><span>Total</span></div>
+      <div class="stat"><strong>{{ total - applied_count }}</strong><span>To apply</span></div>
+      <div class="stat"><strong>{{ applied_count }}</strong><span>Applied</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Company</th>
+            <th>Location</th>
+            <th>Date</th>
+            <th>Source</th>
+            <th>Link</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr id="row-{{ job.id }}" class="{{ 'applied' if job.applied else '' }}">
+            <td style="color:#aaa">{{ loop.index }}</td>
+            <td class="title-cell">{{ job.title }}</td>
+            <td>{{ job.company }}</td>
+            <td>{{ job.location }}</td>
+            <td style="white-space:nowrap">{{ job.date_posted }}</td>
+            <td style="color:#888">{{ job.site }}</td>
+            <td>
+              {% if job.job_url %}
+              <a href="{{ job.job_url }}" target="_blank">Open ↗</a>
+              {% endif %}
+            </td>
+            <td class="action-cell">
+              <button class="toggle-btn {{ 'done' if job.applied else 'pending' }}"
+                      onclick="toggle({{ job.id }}, this)">
+                {{ 'Applied ✓' if job.applied else 'Mark applied' }}
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  {% else %}
+    <div class="empty">
+      <p>No search runs yet.</p>
+      <p>Type <code>!jobsv</code> or <code>!jobeu</code> in Discord to run a search.</p>
+    </div>
+  {% endif %}
+</main>
+
+<script>
+  async function toggle(jobId, btn) {
+    const res  = await fetch(`/toggle/${jobId}`, { method: "POST" });
+    const data = await res.json();
+    const row  = document.getElementById(`row-${jobId}`);
+    if (data.applied) {
+      row.classList.add("applied");
+      btn.classList.replace("pending", "done");
+      btn.textContent = "Applied ✓";
+    } else {
+      row.classList.remove("applied");
+      btn.classList.replace("done", "pending");
+      btn.textContent = "Mark applied";
+    }
+    // Update the "To apply" and "Applied" stat counters
+    updateStats();
+  }
+
+  function updateStats() {
+    const rows    = document.querySelectorAll("tbody tr");
+    const applied = document.querySelectorAll("tbody tr.applied").length;
+    const stats   = document.querySelectorAll(".stat strong");
+    if (stats.length >= 3) {
+      stats[1].textContent = rows.length - applied;
+      stats[2].textContent = applied;
+    }
+  }
+</script>
+
+</body>
+</html>

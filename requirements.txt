@@ -1,0 +1,7 @@
+python-jobspy
+discord.py
+feedparser
+python-dotenv
+pandas
+openpyxl
+flask
