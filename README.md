@@ -1,35 +1,8 @@
-# Whowork — Discord Job Alert Bot
+# Whowork
 
-A self-hosted job search tool for the European market. Trigger a search from Discord, get matching jobs posted in the last 24 hours, and track your applications in a local web UI.
-
-Built for junior/graduate roles in Sweden, Denmark, and Germany — with support for PhD and research positions via Euraxess and jobs.ac.uk.
-
----
-
-## Features
-
-- **Discord commands** — trigger searches directly from Discord, no terminal needed
-- **Multi-source** — scrapes LinkedIn and Indeed via [JobSpy](https://github.com/Bunsly/JobSpy), plus Euraxess and jobs.ac.uk RSS feeds for academic/research roles
-- **Smart filtering** — keyword-based title filtering to exclude senior roles and surface graduate/junior positions
-- **Location priority** — results sorted by city priority (Stockholm → Gothenburg → Malmö → Copenhagen → Germany → rest of Europe)
-- **Deduplication** — seen jobs are tracked so you never see the same posting twice
-- **Web UI** — local dashboard to browse results by search run and mark applications
-- **Runs in background** — macOS LaunchAgent keeps both the bot and web UI running automatically
-
----
-
-## Screenshots
-
-```
-Discord:
-  !jobsv  →  [searching Sweden...]
-  → 23 new Sweden jobs found
-  → Attached: jobs_sweden_20260318_0800.xlsx
-
-Web UI (localhost:8080):
-  Sidebar: list of past runs
-  Table:   Title | Company | Location | Date | Source | Link | [Mark Applied]
-```
+A Discord bot who searches enigneer(editable) related roles in Europe.
+![screenshot](docs/ss1.png)
+![screenshot](docs/ss2.png)
 
 ---
 
@@ -185,12 +158,14 @@ whowork/
 
 ---
 
-## Contributing
 
-Pull requests are welcome. Please open an issue first to discuss larger changes.
+## Features
 
----
+- **Discord commands** — trigger searches directly from Discord, no terminal needed
+- **Multi-source** — scrapes LinkedIn and Indeed via [JobSpy](https://github.com/Bunsly/JobSpy), plus Euraxess and jobs.ac.uk RSS feeds for academic/research roles
+- **Smart filtering** — keyword-based title filtering to exclude senior roles and surface graduate/junior positions
+- **Location priority** — results sorted by city priority (Stockholm → Gothenburg → Malmö → Copenhagen → Germany → rest of Europe)
+- **Deduplication** — seen jobs are tracked so you never see the same posting twice
+- **Web UI** — local dashboard to browse results by search run and mark applications
+- **Runs in background** — macOS LaunchAgent keeps both the bot and web UI running automatically
 
-## License
-
-[MIT](LICENSE)
