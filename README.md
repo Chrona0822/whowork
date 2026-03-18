@@ -1,6 +1,6 @@
 # Whowork
 
-A Discord bot who searches enigneer(editable) related roles in Europe.
+A Discord bot who searches enigneer(editable) related roles in 24 hours(editable) in Europe.
 ![screenshot](docs/ss1.png)
 ![screenshot](docs/ss2.png)
 
