@@ -2,12 +2,14 @@
 SQLite persistence layer.
 Schema:
   runs  — one row per search run (timestamp, region, count)
-  jobs  — all jobs, linked to a run, with applied toggle
+  jobs  — all jobs, linked to a run, with applied + progress tracking
 """
 
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+
+import pandas as pd
 
 DB_PATH = Path("jobs.db")
 
@@ -16,6 +18,18 @@ def _conn():
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     return con
+
+
+def _safe_str(val) -> str:
+    """Convert a value to string, returning '' for NaN/None/NaT."""
+    if val is None:
+        return ""
+    try:
+        if pd.isna(val):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(val).strip()
 
 
 def init_db() -> None:
@@ -36,9 +50,20 @@ def init_db() -> None:
                 date_posted TEXT,
                 site        TEXT,
                 job_url     TEXT,
-                applied     INTEGER NOT NULL DEFAULT 0
+                applied     INTEGER NOT NULL DEFAULT 0,
+                progress    TEXT    NOT NULL DEFAULT ''
             );
         """)
+        # Migrations for existing databases
+        for sql in [
+            "ALTER TABLE jobs ADD COLUMN applied   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE jobs ADD COLUMN progress  TEXT    NOT NULL DEFAULT ''",
+            # keep old interview column working — map it to progress on read
+        ]:
+            try:
+                con.execute(sql)
+            except Exception:
+                pass
 
 
 def save_run(df, region: str) -> int:
@@ -56,12 +81,12 @@ def save_run(df, region: str) -> int:
             [
                 (
                     run_id,
-                    str(row.get("title",       "")),
-                    str(row.get("company",     "")),
-                    str(row.get("location",    "")),
-                    str(row.get("date_posted", "")),
-                    str(row.get("site",        "")),
-                    str(row.get("job_url",     "")),
+                    _safe_str(row.get("title")),
+                    _safe_str(row.get("company")),
+                    _safe_str(row.get("location")),
+                    _safe_str(row.get("date_posted")),
+                    _safe_str(row.get("site")),
+                    _safe_str(row.get("job_url")),
                 )
                 for _, row in df.iterrows()
             ],
@@ -82,8 +107,28 @@ def get_jobs(run_id: int) -> list:
         ).fetchall()
 
 
+def get_all_applied() -> list:
+    """All applied jobs across every run, newest run first."""
+    init_db()
+    with _conn() as con:
+        return con.execute("""
+            SELECT jobs.*, runs.timestamp AS run_timestamp, runs.region AS run_region
+            FROM jobs
+            JOIN runs ON jobs.run_id = runs.id
+            WHERE jobs.applied = 1
+            ORDER BY runs.id DESC, jobs.id
+        """).fetchall()
+
+
 def toggle_applied(job_id: int) -> int:
     with _conn() as con:
         con.execute("UPDATE jobs SET applied = 1 - applied WHERE id = ?", (job_id,))
-        row = con.execute("SELECT applied FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        return row["applied"]
+        return con.execute("SELECT applied FROM jobs WHERE id = ?", (job_id,)).fetchone()["applied"]
+
+
+def set_progress(job_id: int, value: str) -> str:
+    allowed = {"", "interview", "closed"}
+    value = value if value in allowed else ""
+    with _conn() as con:
+        con.execute("UPDATE jobs SET progress = ? WHERE id = ?", (value, job_id))
+    return value

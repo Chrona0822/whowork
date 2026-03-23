@@ -76,7 +76,7 @@ SWEDEN_CITY_PRIORITY = {
 HOURS_OLD          = 24    # look back window for LinkedIn/Indeed
 ACADEMIC_HOURS_OLD = 168   # 7 days for PhD/research (posted less frequently)
 RESULTS_PER_CALL   = 25    # JobSpy results per query×country call
-MAX_SUMMARY_JOBS   = 10    # how many jobs to show inline in Discord
+MAX_SUMMARY_JOBS   = 3     # how many jobs to show inline in Discord
 
 # ── Web UI ─────────────────────────────────────────────────────────────────────
 WEB_PORT = 8080
