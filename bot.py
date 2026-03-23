@@ -104,6 +104,13 @@ async def jobeu_command(ctx):
     await _run_and_respond(ctx, region="eu", label="Europe (non-SE)")
 
 
+# ── !jobac — Academic / research roles ────────────────────────────────────────
+
+@bot.command(name="jobac")
+async def jobac_command(ctx):
+    await _run_and_respond(ctx, region="academic", label="Academic & Research")
+
+
 # ── !status ────────────────────────────────────────────────────────────────────
 
 @bot.command(name="status")
@@ -138,7 +145,8 @@ async def help_command(ctx):
     await ctx.send(
         "**Job Alert Bot — Commands**\n\n"
         "`!jobsv`  — Search Sweden (Stockholm → Gothenburg → Malmö)\n"
-        "`!jobeu`  — Search Europe excl. Sweden (Denmark, Germany, ...) + academic RSS\n"
+        "`!jobeu`  — Search Europe excl. Sweden (Denmark, Germany, ...)\n"
+        "`!jobac`  — Search academic & research roles (Euraxess + jobs.ac.uk + KTH + SU Varbi, 7-day window)\n"
         "`!status` — Show how many jobs have been seen so far\n"
         "`!reset`  — Clear seen-jobs history (next search resurfaces all jobs)\n"
         "`!restart`— Restart the bot\n"

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Job Tracker</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -48,9 +49,10 @@
       border-radius: 10px; font-size: 10px; font-weight: 700;
       margin-right: 4px; text-transform: uppercase;
     }
-    .badge-sweden { background: #006AA7; color: #fff; }
-    .badge-eu     { background: #003399; color: #fff; }
-    .badge-all    { background: #374151; color: #fff; }
+    .badge-sweden   { background: #006AA7; color: #fff; }
+    .badge-eu       { background: #003399; color: #fff; }
+    .badge-all      { background: #374151; color: #fff; }
+    .badge-academic { background: #0d9488; color: #fff; }
 
     /* ── Main ──────────────────────────────────────────────── */
     #main { flex: 1; overflow-y: auto; padding: 28px 32px; }
@@ -99,8 +101,10 @@
     td.title-cell { max-width: 300px; }
     td.title-cell a {
       color: #1a2535; text-decoration: none; font-weight: 500;
-      display: block; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     td.title-cell a:hover { color: #2563eb; text-decoration: underline; }
 
@@ -230,9 +234,19 @@
     {% set applied_count = all_jobs | selectattr("applied", "equalto", 1) | list | length %}
     {% set total         = all_jobs | length %}
 
-    <h1>
-      {{ selected.timestamp }}
-      &nbsp;<span style="font-weight:400;color:#888;font-size:14px">{{ selected.region | upper }}</span>
+    <h1 style="display:flex;align-items:center;gap:14px">
+      <span>
+        {{ selected.timestamp }}
+        &nbsp;<span style="font-weight:400;color:#888;font-size:14px">{{ selected.region | upper }}</span>
+      </span>
+      <form method="POST" action="/delete_run/{{ selected.id }}"
+            onsubmit="return confirm('Delete this run and all its jobs?')">
+        <button type="submit"
+                style="padding:4px 12px;border:1px solid #fca5a5;border-radius:5px;
+                       background:#fff;color:#dc2626;font-size:12px;font-weight:600;cursor:pointer">
+          Delete run
+        </button>
+      </form>
     </h1>
 
     <div class="stats">
@@ -288,7 +302,12 @@
                 {{ 'Applied ✓' if job.applied else 'Mark applied' }}
               </button>
             </td>
-            <td style="white-space:nowrap;color:#888">{{ job.date_posted | format_date }}</td>
+            <td style="white-space:nowrap;color:#888;line-height:1.5">
+              {{ job.date_posted | format_date }}
+              {% if job.deadline and job.deadline not in ('', 'nan', 'none') %}
+              <br><span style="font-size:11px;color:#b45309" title="Application deadline">↯ {{ job.deadline }}</span>
+              {% endif %}
+            </td>
             <td style="color:#aaa">{{ job.site }}</td>
             {% if filter_mode == 'applied' %}
             <td class="action-cell">

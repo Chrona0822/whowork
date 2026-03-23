@@ -48,6 +48,7 @@ def init_db() -> None:
                 company     TEXT,
                 location    TEXT,
                 date_posted TEXT,
+                deadline    TEXT    NOT NULL DEFAULT '',
                 site        TEXT,
                 job_url     TEXT,
                 applied     INTEGER NOT NULL DEFAULT 0,
@@ -58,7 +59,7 @@ def init_db() -> None:
         for sql in [
             "ALTER TABLE jobs ADD COLUMN applied   INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE jobs ADD COLUMN progress  TEXT    NOT NULL DEFAULT ''",
-            # keep old interview column working — map it to progress on read
+            "ALTER TABLE jobs ADD COLUMN deadline  TEXT    NOT NULL DEFAULT ''",
         ]:
             try:
                 con.execute(sql)
@@ -76,8 +77,8 @@ def save_run(df, region: str) -> int:
         )
         run_id = cur.lastrowid
         con.executemany(
-            """INSERT INTO jobs (run_id, title, company, location, date_posted, site, job_url)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO jobs (run_id, title, company, location, date_posted, deadline, site, job_url)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
                     run_id,
@@ -85,6 +86,7 @@ def save_run(df, region: str) -> int:
                     _safe_str(row.get("company")),
                     _safe_str(row.get("location")),
                     _safe_str(row.get("date_posted")),
+                    _safe_str(row.get("deadline")),
                     _safe_str(row.get("site")),
                     _safe_str(row.get("job_url")),
                 )
@@ -124,6 +126,12 @@ def toggle_applied(job_id: int) -> int:
     with _conn() as con:
         con.execute("UPDATE jobs SET applied = 1 - applied WHERE id = ?", (job_id,))
         return con.execute("SELECT applied FROM jobs WHERE id = ?", (job_id,)).fetchone()["applied"]
+
+
+def delete_run(run_id: int) -> None:
+    with _conn() as con:
+        con.execute("DELETE FROM jobs WHERE run_id = ?", (run_id,))
+        con.execute("DELETE FROM runs WHERE id = ?", (run_id,))
 
 
 def set_progress(job_id: int, value: str) -> str:
