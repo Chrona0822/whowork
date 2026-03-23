@@ -1,18 +1,26 @@
 """
 Job search logic:
-  - JobSpy  → LinkedIn + Indeed (commercial job boards)
-  - Euraxess → EU academic/research positions (RSS)
-  - jobs.ac.uk → UK/EU academic positions (RSS)
+  - JobSpy      → LinkedIn + Indeed (commercial job boards)
+  - Euraxess    → EU academic/research positions (RSS) — may be blocked by Cloudflare
+  - jobs.ac.uk  → UK/EU academic positions (RSS) — may return 500 intermittently
+  - KTH         → Royal Institute of Technology open positions (HTML + detail-page scrape)
+  - SU Varbi    → Stockholm University open positions (RSS feed)
 """
 
+import calendar
 import hashlib
+import json
 import os
+import re
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
 import feedparser
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
 from config import (
     ACADEMIC_HOURS_OLD,
@@ -28,6 +36,25 @@ from config import (
 )
 
 SEEN_JOBS_FILE = "seen_jobs.txt"
+
+_MONTH_ABBR = {m.lower(): i for i, m in enumerate(calendar.month_abbr) if m}
+
+
+def _normalize_date(s: str) -> str:
+    """Convert any date string to YYYY-MM-DD, or return '' if unparseable."""
+    if not s:
+        return ""
+    s = s.strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        return s[:10]
+    # DD.Mon.YYYY  or  DD/Mon/YYYY  (e.g. "24.Feb.2026")
+    m = re.match(r"^(\d{1,2})[./](\w+)[./](\d{4})$", s)
+    if m:
+        day, mon, year = m.groups()
+        mon_num = _MONTH_ABBR.get(mon[:3].lower())
+        if mon_num:
+            return f"{year}-{mon_num:02d}-{int(day):02d}"
+    return ""
 
 
 # ── Deduplication helpers ──────────────────────────────────────────────────────
@@ -166,14 +193,26 @@ def search_all_jobspy(status_callback=None, region: str = "all") -> pd.DataFrame
     return combined
 
 
+RSS_TIMEOUT = 10  # seconds per HTTP request before giving up
+
+
+def _fetch_feed(url: str):
+    """Fetch an RSS URL with a hard timeout, then parse with feedparser."""
+    resp = requests.get(url, timeout=RSS_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+    resp.raise_for_status()
+    return feedparser.parse(resp.content)
+
+
 # ── Euraxess RSS ───────────────────────────────────────────────────────────────
 
-def search_euraxess(query: str) -> pd.DataFrame:
+def search_euraxess(query: str, country_id: int | None = None) -> pd.DataFrame:
     url = f"https://euraxess.ec.europa.eu/jobs/search/rss?query={query.replace(' ', '+')}"
+    if country_id:
+        url += f"&f%5B0%5D=job_country%3A{country_id}"
     try:
-        feed = feedparser.parse(url)
+        feed   = _fetch_feed(url)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=ACADEMIC_HOURS_OLD)
-        rows = []
+        rows   = []
         for entry in feed.entries:
             if hasattr(entry, "published_parsed") and entry.published_parsed:
                 pub = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
@@ -201,14 +240,11 @@ def search_euraxess(query: str) -> pd.DataFrame:
 # ── jobs.ac.uk RSS ─────────────────────────────────────────────────────────────
 
 def search_jobsac(query: str) -> pd.DataFrame:
-    url = (
-        f"https://www.jobs.ac.uk/search/rss/"
-        f"?keywords={query.replace(' ', '+')}&location=europe"
-    )
+    url = f"https://www.jobs.ac.uk/search/rss/?keywords={query.replace(' ', '+')}&location=europe"
     try:
-        feed = feedparser.parse(url)
+        feed   = _fetch_feed(url)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=ACADEMIC_HOURS_OLD)
-        rows = []
+        rows   = []
         for entry in feed.entries:
             if hasattr(entry, "published_parsed") and entry.published_parsed:
                 pub = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
@@ -230,34 +266,348 @@ def search_jobsac(query: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+# ── KTH (Royal Institute of Technology) ───────────────────────────────────────
+
+_KTH_SCHOOL = "electrical engineering and computer science"  # EECS filter
+
+
+def _fetch_kth_detail(job_url: str) -> tuple[str, str, str]:
+    """
+    Fetch a KTH job detail page.
+    Returns (published_date, deadline, school_name).
+    school_name is '' if it could not be determined.
+    """
+    try:
+        resp = requests.get(job_url, timeout=RSS_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "html.parser")
+
+        pub = dl = school = ""
+
+        # Try structured JSON first
+        script = soup.find("script", string=re.compile(r"__compressedData__DATA"))
+        if script:
+            m = re.search(r"window\.__compressedData__DATA\s*=\s*'([^']+)'", script.string)
+            if m:
+                detail = json.loads(urllib.parse.unquote(m.group(1)))
+                if isinstance(detail, dict):
+                    pub = (detail.get("publishedDate") or detail.get("publicationDate")
+                           or detail.get("startDate") or "")
+                    dl  = (detail.get("applicationDeadline") or detail.get("lastApplicationDate")
+                           or detail.get("endDate") or detail.get("closingDate") or "")
+                    school = (detail.get("school") or detail.get("department")
+                              or detail.get("organisationName") or detail.get("unit")
+                              or detail.get("schoolName") or detail.get("departmentName") or "")
+                    pub = _normalize_date(str(pub))
+                    dl  = _normalize_date(str(dl))
+
+        # Fallback: regex/text scan
+        if not pub or not dl or not school:
+            text = soup.get_text(" ", strip=True)
+            if not pub:
+                m2 = re.search(
+                    r'[Pp]ublished[\s:]+(\d{1,2}[\./]\w+[\./]\d{4}|\d{4}-\d{2}-\d{2})', text
+                )
+                pub = _normalize_date(m2.group(1)) if m2 else ""
+            if not dl:
+                m3 = re.search(
+                    r'[Ll]ast application date[\s:]+(\d{1,2}[\./]\w+[\./]\d{4}|\d{4}-\d{2}-\d{2})',
+                    text,
+                )
+                dl = _normalize_date(m3.group(1)) if m3 else ""
+            if not school:
+                # KTH school names follow pattern "School of …"
+                m4 = re.search(r'School of [A-Z][^\n<]{5,60}', text)
+                school = m4.group(0).strip() if m4 else ""
+
+        return pub, dl, school
+    except Exception:
+        return ("", "", "")
+
+
+def search_kth() -> pd.DataFrame:
+    """Scrape open positions from KTH's job listing page."""
+    try:
+        resp = requests.get(
+            "https://www.kth.se/lediga-jobb?l=en",
+            timeout=RSS_TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "html.parser")
+
+        # KTH embeds job data as URL-encoded JSON in a <script> tag
+        script = soup.find("script", string=re.compile(r"__compressedData__DATA"))
+        rows = []
+        if script:
+            m = re.search(r"window\.__compressedData__DATA\s*=\s*'([^']+)'", script.string)
+            if m:
+                data = json.loads(urllib.parse.unquote(m.group(1)))
+                jobs_list = data if isinstance(data, list) else (
+                    data.get("jobs") or data.get("items") or data.get("positions") or []
+                )
+                for job in jobs_list:
+                    title = job.get("title") or job.get("name") or ""
+                    if not title or not is_relevant(str(title)):
+                        continue
+                    link = job.get("url") or job.get("link") or job.get("applyUrl") or ""
+                    if link and not link.startswith("http"):
+                        link = "https://www.kth.se" + link
+                    # Try to extract dates from listing JSON first
+                    pub = (job.get("publishedDate") or job.get("publicationDate")
+                           or job.get("startDate") or "")
+                    dl  = (job.get("applicationDeadline") or job.get("lastApplicationDate")
+                           or job.get("endDate") or job.get("closingDate") or "")
+                    rows.append({
+                        "title":             title,
+                        "company":           "KTH",
+                        "location":          "Stockholm, Sweden",
+                        "job_url":           link,
+                        "date_posted":       _normalize_date(str(pub)) if pub else "",
+                        "deadline":          _normalize_date(str(dl))  if dl  else "",
+                        "site":              "kth",
+                        "location_priority": 1,
+                        "search_query":      "kth",
+                    })
+
+        # Fallback: parse job links directly if JSON approach yielded nothing
+        if not rows:
+            for a in soup.select("a[href*='lediga-jobb']"):
+                title = a.get_text(strip=True)
+                if not title or not is_relevant(title):
+                    continue
+                href = a.get("href", "")
+                if href and not href.startswith("http"):
+                    href = "https://www.kth.se" + href
+                rows.append({
+                    "title":             title,
+                    "company":           "KTH",
+                    "location":          "Stockholm, Sweden",
+                    "job_url":           href,
+                    "date_posted":       "",
+                    "deadline":          "",
+                    "site":              "kth",
+                    "location_priority": 1,
+                    "search_query":      "kth",
+                })
+
+        if not rows:
+            return pd.DataFrame()
+
+        # Fetch every detail page in parallel — needed for school name + dates
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                pool.submit(_fetch_kth_detail, rows[i]["job_url"]): i
+                for i in range(len(rows))
+                if rows[i]["job_url"]
+            }
+            for future in as_completed(futures):
+                i = futures[future]
+                pub, dl, school = future.result()
+                # PhD/doctoral roles → EECS school filter
+                # All other roles (engineer, researcher, …) → no school filter
+                title_lower = rows[i]["title"].lower()
+                is_phd = "phd" in title_lower or "doctoral" in title_lower
+                if is_phd and _KTH_SCHOOL not in school.lower():
+                    rows[i] = None
+                    continue
+                if pub:
+                    rows[i]["date_posted"] = pub
+                if dl:
+                    rows[i]["deadline"] = dl
+
+        rows = [r for r in rows if r is not None]
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
+    except Exception as e:
+        print(f"  [kth] {e}")
+        return pd.DataFrame()
+
+
+# ── Stockholm University (Varbi) ───────────────────────────────────────────────
+
+# For SU Varbi: Swedish role titles that always need a field context
+_SU_ROLE_SV = ["doktorand", "forskare", "forskningsassistent"]
+
+# If title contains one of the above AND one of these field terms → keep
+_SU_FIELD_SV = [
+    "informatik", "datalogi", "datateknik",     # computer science
+    "mjukvara", "mjukvaruteknik",               # software
+    "machine learning", "deep learning",        # ML (used in Swedish academia)
+    "artificiell intelligens",                  # AI
+    "statistik",                                # statistics (relevant for ML/data)
+    "data",                                     # data science
+    "it ", " it", "it-",                        # IT
+    "cybersäkerhet", "datasäkerhet",            # security
+    "matematik",                                # maths (relevant for ML/quant)
+    "naturliga språk", "nlp",                   # NLP
+    "visualisering",                            # data vis
+]
+
+# Swedish job titles that are relevant on their own (no field qualifier needed)
+_SU_DIRECT_SV = [
+    "programmerare",      # programmer
+    "systemutvecklare",   # system developer
+    "mjukvaruutvecklare", # software developer
+    "it-",                # IT roles (network, security…)
+]
+
+_SU_EXCLUDE_SV = [
+    "professor",     # too senior
+    "lektor",        # senior lecturer
+    "adjunkt",       # lecturer
+    "administratör", # admin
+    "koordinator",   # coordinator
+    "ekonom",        # finance admin
+    "jurist",        # lawyer
+    "postdoktor",    # postdoc (Swedish)
+]
+
+
+def _is_relevant_su(title: str) -> bool:
+    """Relevance check for SU Varbi — handles both Swedish and English titles."""
+    t = title.lower()
+    for kw in TITLE_EXCLUDE + _SU_EXCLUDE_SV:
+        if kw in t:
+            return False
+    # English titles: use standard filter
+    if any(kw in t for kw in TITLE_INCLUDE):
+        return True
+    # Swedish: direct role titles (no field required)
+    if any(kw in t for kw in _SU_DIRECT_SV):
+        return True
+    # Swedish: role + field required
+    if any(role in t for role in _SU_ROLE_SV):
+        return any(field in t for field in _SU_FIELD_SV)
+    return False
+
+
+# Swedish-title Varbi feeds (use _is_relevant_su for filtering)
+_VARBI_UNIVERSITIES = [
+    ("Stockholm University", "https://su.varbi.com/en/what:rssfeed/", "Stockholm, Sweden", 1),
+    ("Uppsala University",   "https://uu.varbi.com/en/what:rssfeed/", "Uppsala, Sweden",   2),
+    ("Lund University",      "https://lu.varbi.com/en/what:rssfeed/", "Lund, Sweden",      2),
+]
+
+# English-title feeds — use standard is_relevant() filter
+_ENGLISH_UNI_FEEDS = [
+    ("Linköping University", "https://liu.se/rss/liu-jobs-en.rss", "Linköping, Sweden", 2),
+]
+
+
+def _search_varbi(name: str, rss_url: str, location: str, loc_priority: int) -> pd.DataFrame:
+    """Fetch positions from any Swedish university Varbi RSS feed."""
+    try:
+        feed   = _fetch_feed(rss_url)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=ACADEMIC_HOURS_OLD)
+        rows   = []
+        for entry in feed.entries:
+            title = entry.get("title", "")
+            if not title or not _is_relevant_su(title):
+                continue
+            if hasattr(entry, "published_parsed") and entry.published_parsed:
+                pub = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                if pub < cutoff:
+                    continue
+                date_posted = pub.strftime("%Y-%m-%d")
+            else:
+                date_posted = ""
+            rows.append({
+                "title":             title,
+                "company":           name,
+                "location":          location,
+                "job_url":           entry.get("link", ""),
+                "date_posted":       date_posted,
+                "deadline":          "",
+                "site":              "varbi",
+                "location_priority": loc_priority,
+                "search_query":      "varbi",
+            })
+        return pd.DataFrame(rows)
+    except Exception as e:
+        print(f"  [varbi/{name}] {e}")
+        return pd.DataFrame()
+
+
+def search_uni_feeds() -> pd.DataFrame:
+    """Fetch positions from all configured university RSS feeds in parallel."""
+    all_feeds = _VARBI_UNIVERSITIES + _ENGLISH_UNI_FEEDS
+    frames = []
+    with ThreadPoolExecutor(max_workers=len(all_feeds)) as pool:
+        futures = {
+            pool.submit(_search_varbi, name, url, loc, pri): name
+            for name, url, loc, pri in all_feeds
+        }
+        for future in as_completed(futures):
+            df = future.result()
+            if not df.empty:
+                frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+search_su_varbi = search_uni_feeds  # keep old name working
+
+
 # ── Main entry point ───────────────────────────────────────────────────────────
 
 def run_search(status_callback=None, region: str = "all") -> tuple[pd.DataFrame, int]:
     """
     Returns (output_df, new_job_count).
-    region: "all" | "sweden" | "eu"
-      - "sweden" → LinkedIn/Indeed Sweden only, no academic RSS
-      - "eu"     → LinkedIn/Indeed non-Sweden + Euraxess/jobs.ac.uk
-      - "all"    → everything
+    region: "all" | "sweden" | "eu" | "academic"
+      - "sweden"   → LinkedIn/Indeed Sweden only
+      - "eu"       → LinkedIn/Indeed non-Sweden (Denmark, Germany, ...)
+      - "academic" → Euraxess + jobs.ac.uk only (no LinkedIn/Indeed)
+      - "all"      → everything
     """
     seen = load_seen_jobs()
     frames = []
 
-    # Commercial boards
-    if status_callback:
-        status_callback("Starting LinkedIn/Indeed search...")
-    df_boards = search_all_jobspy(status_callback, region=region)
-    if not df_boards.empty:
-        frames.append(df_boards)
-
-    # Academic boards — only for eu/all (RSS feeds are Europe-wide, not Sweden-specific)
-    if region in ("eu", "all"):
+    # Commercial boards (skip for academic-only search)
+    if region != "academic":
         if status_callback:
-            status_callback("Searching Euraxess & jobs.ac.uk...")
-        for q in ACADEMIC_QUERIES:
-            frames.append(search_euraxess(q))
-            frames.append(search_jobsac(q))
-            time.sleep(0.5)
+            status_callback("Starting LinkedIn/Indeed search...")
+        df_boards = search_all_jobspy(status_callback, region=region)
+        if not df_boards.empty:
+            frames.append(df_boards)
+
+    # Academic boards — only for academic/all, all queries in parallel
+    if region in ("academic", "all"):
+        n = len(ACADEMIC_QUERIES)
+        if status_callback:
+            status_callback(f"Searching KTH & SU Varbi in parallel...")
+
+        # jobs.ac.uk returning 500; Euraxess RSS endpoint gone (404/503)
+        # Only run them if you want to re-enable later — they fail silently via try/except
+        _EURAXESS_ENABLED  = False
+        _JOBSAC_ENABLED    = False
+
+        def _euraxess_sweden(q):
+            return search_euraxess(q, country_id=770)
+
+        active_rss = []
+        if _EURAXESS_ENABLED:
+            active_rss += [(q, "euraxess") for q in ACADEMIC_QUERIES]
+            active_rss += [(q, "euraxess_se") for q in ACADEMIC_QUERIES]
+        if _JOBSAC_ENABLED:
+            active_rss += [(q, "jobsac") for q in ACADEMIC_QUERIES]
+
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            futures: dict = {
+                pool.submit(
+                    search_euraxess if src == "euraxess" else
+                    _euraxess_sweden  if src == "euraxess_se" else
+                    search_jobsac,
+                    q,
+                ): (q, src)
+                for q, src in active_rss
+            }
+            # KTH and SU Varbi don't take a query — submit once
+            futures[pool.submit(search_kth)]       = ("kth",)
+            futures[pool.submit(search_su_varbi)]  = ("su_varbi",)
+
+            for future in as_completed(futures):
+                df = future.result()
+                if not df.empty:
+                    frames.append(df)
 
     if not frames:
         return pd.DataFrame(), 0
@@ -268,7 +618,12 @@ def run_search(status_callback=None, region: str = "all") -> tuple[pd.DataFrame,
         if col not in combined.columns:
             combined[col] = ""
 
-    combined = combined[combined["title"].apply(lambda t: is_relevant(str(t)))]
+    # Sources that do their own pre-filtering — don't double-filter with English keywords
+    _pre_filtered = {"kth", "su.varbi", "varbi", "euraxess", "jobs.ac.uk"}
+    combined = combined[combined.apply(
+        lambda r: True if r.get("site") in _pre_filtered else is_relevant(str(r["title"])),
+        axis=1,
+    )]
     combined = combined.drop_duplicates(subset=["job_url"], keep="first")
     combined["job_hash"] = combined.apply(make_job_hash, axis=1)
 

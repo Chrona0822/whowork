@@ -3,6 +3,7 @@
 A Discord bot who searches enigneer(editable) related roles in 24 hours(editable) in Europe.
 ![screenshot](docs/ss1.png)
 ![screenshot](docs/ss2.png)
+![screenshot](docs/home.png)
 
 ---
 
@@ -69,6 +70,7 @@ bash setup_launchagent.sh install
 ```
 
 This installs two LaunchAgents that start automatically on login:
+
 - `bot.py` — Discord bot
 - `web.py` — web UI at [http://localhost:8080](http://localhost:8080)
 
@@ -86,14 +88,14 @@ Runs `run.py` every day at 8:00 AM and posts results to Discord via webhook.
 
 ### Discord commands
 
-| Command | Description |
-|---|---|
-| `!jobsv` | Search Sweden (Stockholm → Gothenburg → Malmö) |
-| `!jobeu` | Search Europe excl. Sweden + academic RSS feeds |
-| `!status` | Show how many jobs have been tracked so far |
-| `!reset` | Clear seen-jobs history (resurfaces all jobs next run) |
-| `!restart` | Restart the bot and web UI |
-| `!help` | Show all commands |
+| Command    | Description                                            |
+| ---------- | ------------------------------------------------------ |
+| `!jobsv`   | Search Sweden (Stockholm → Gothenburg → Malmö)         |
+| `!jobeu`   | Search Europe excl. Sweden + academic RSS feeds        |
+| `!status`  | Show how many jobs have been tracked so far            |
+| `!reset`   | Clear seen-jobs history (resurfaces all jobs next run) |
+| `!restart` | Restart the bot and web UI                             |
+| `!help`    | Show all commands                                      |
 
 ### Web UI
 
@@ -138,12 +140,12 @@ whowork/
 
 ## Data sources
 
-| Source | Type | Roles |
-|---|---|---|
-| LinkedIn | Scraping via JobSpy | All commercial roles |
-| Indeed | Scraping via JobSpy | All commercial roles |
-| [Euraxess](https://euraxess.ec.europa.eu) | RSS feed | PhD, research, postdoc |
-| [jobs.ac.uk](https://www.jobs.ac.uk) | RSS feed | Academic, research |
+| Source                                    | Type                | Roles                  |
+| ----------------------------------------- | ------------------- | ---------------------- |
+| LinkedIn                                  | Scraping via JobSpy | All commercial roles   |
+| Indeed                                    | Scraping via JobSpy | All commercial roles   |
+| [Euraxess](https://euraxess.ec.europa.eu) | RSS feed            | PhD, research, postdoc |
+| [jobs.ac.uk](https://www.jobs.ac.uk)      | RSS feed            | Academic, research     |
 
 > **Note:** JobSpy uses unofficial LinkedIn scraping. This is against LinkedIn's Terms of Service. Use responsibly and for personal use only. Excessive requests from a single IP may result in temporary blocks.
 
@@ -158,7 +160,6 @@ whowork/
 
 ---
 
-
 ## Features
 
 - **Discord commands** — trigger searches directly from Discord, no terminal needed
@@ -168,4 +169,3 @@ whowork/
 - **Deduplication** — seen jobs are tracked so you never see the same posting twice
 - **Web UI** — local dashboard to browse results by search run and mark applications
 - **Runs in background** — macOS LaunchAgent keeps both the bot and web UI running automatically
-

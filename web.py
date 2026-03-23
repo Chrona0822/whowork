@@ -5,7 +5,7 @@ Open: http://localhost:8080
 """
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
-from db import get_all_applied, get_jobs, get_runs, init_db, set_progress, toggle_applied
+from db import delete_run, get_all_applied, get_jobs, get_runs, init_db, set_progress, toggle_applied
 
 app = Flask(__name__)
 
@@ -45,6 +45,12 @@ def run_view(run_id):
     return render_template("index.html", runs=runs, jobs=jobs, all_jobs=all_jobs,
                            selected=selected, filter_mode=filter_mode,
                            page="run", applied=[])
+
+
+@app.route("/delete_run/<int:run_id>", methods=["POST"])
+def delete_run_view(run_id):
+    delete_run(run_id)
+    return redirect(url_for("index"))
 
 
 @app.route("/toggle/<int:job_id>", methods=["POST"])

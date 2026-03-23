@@ -13,16 +13,22 @@ JOBSPY_QUERIES = [
     "AI infrastructure",
     "graduate program",
     "front-end engineer"
+    "software developer"
 ]
 
 # Academic queries (Euraxess + jobs.ac.uk)
 ACADEMIC_QUERIES = [
     "PhD computer science",
     "PhD machine learning",
+    "PhD data science",
+    "PhD reinforcement learning",
     "PhD finance computer science",
+    "PhD AI",
     "research assistant machine learning",
     "research assistant software",
-    "research assistant"
+    "research assistant computer",
+    "research assistant data science",
+    "research assistant applied AI",
 ]
 
 # ── Locations (priority 1 = top) ───────────────────────────────────────────────
@@ -47,9 +53,12 @@ LOCATIONS = [
 # Any of these in the job *title* → skip
 TITLE_EXCLUDE = [
     #  "lead", "principal", "staff engineer", "director",
-    "vp ", 
-    # "head of", "manager", "architect", "5+ years", 
+    "vp ",
+    # "head of", "manager", "architect", "5+ years",
     "7+ years",
+    "postdoc",
+    "post-doc",
+    "post doc",
 ]
 
 # At least one of these must appear in the job *title* to keep it

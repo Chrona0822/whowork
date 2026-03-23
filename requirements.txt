@@ -5,3 +5,5 @@ python-dotenv
 pandas
 openpyxl
 flask
+requests
+beautifulsoup4
