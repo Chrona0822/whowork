@@ -1,8 +1,15 @@
 ![screenshot](docs/logo.png)
 
 A Discord bot who searches enigneer(editable) related roles in 24 hours(editable) in Europe.
+
+Collect all related opportunity from different sources(linkedin, indeed, academic roles) in a local webpage.
+
+### Discord command sample
+
 ![screenshot](docs/ss1.png)
+### Single run page - Collect all related roles order by city (Stockholm → Gothenburg → Malmö). Mark as applied.
 ![screenshot](docs/ss2.png)
+### Home page - Collect all applied roles.
 ![screenshot](docs/home.png)
 
 ---
