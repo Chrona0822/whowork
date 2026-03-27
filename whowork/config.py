@@ -14,6 +14,10 @@ JOBSPY_QUERIES = [
     "graduate program",
     "front-end engineer"
     "software developer"
+    "machine learning engineer"
+    "Ml engineer"
+    "ml engineer intern"
+    "full stack developer intern"
 ]
 
 # Academic queries (Euraxess + jobs.ac.uk)

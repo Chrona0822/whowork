@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path("jobs.db")
+DB_PATH = Path(__file__).parent.parent / "data" / "jobs.db"
 
 
 def _conn():
@@ -60,6 +60,7 @@ def init_db() -> None:
             "ALTER TABLE jobs ADD COLUMN applied   INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE jobs ADD COLUMN progress  TEXT    NOT NULL DEFAULT ''",
             "ALTER TABLE jobs ADD COLUMN deadline  TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN summary   TEXT    NOT NULL DEFAULT ''",
         ]:
             try:
                 con.execute(sql)
@@ -132,6 +133,11 @@ def delete_run(run_id: int) -> None:
     with _conn() as con:
         con.execute("DELETE FROM jobs WHERE run_id = ?", (run_id,))
         con.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+
+
+def save_summary(job_id: int, summary_json: str) -> None:
+    with _conn() as con:
+        con.execute("UPDATE jobs SET summary = ? WHERE id = ?", (summary_json, job_id))
 
 
 def set_progress(job_id: int, value: str) -> str:
