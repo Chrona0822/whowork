@@ -22,7 +22,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-from config import (
+from whowork.config import (
     ACADEMIC_HOURS_OLD,
     ACADEMIC_QUERIES,
     HOURS_OLD,
@@ -35,7 +35,8 @@ from config import (
     TITLE_INCLUDE,
 )
 
-SEEN_JOBS_FILE = "seen_jobs.txt"
+from pathlib import Path
+SEEN_JOBS_FILE = str(Path(__file__).parent.parent / "data" / "seen_jobs.txt")
 
 _MONTH_ABBR = {m.lower(): i for i, m in enumerate(calendar.month_abbr) if m}
 
