@@ -23,7 +23,7 @@ def post_to_discord(df, count: int, xlsx_path) -> None:
         print("  DISCORD_WEBHOOK_URL not set in .env — skipping Discord post.")
         return
 
-    from config import MAX_SUMMARY_JOBS
+    from whowork.config import MAX_SUMMARY_JOBS
     mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     lines = [f"**{count} new job(s)** — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"]
@@ -53,8 +53,8 @@ def post_to_discord(df, count: int, xlsx_path) -> None:
 def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting job search...")
 
-    from search import run_search
-    from export import save_xlsx
+    from whowork.search import run_search
+    from whowork.export import save_xlsx
 
     df, count = run_search(status_callback=lambda m: print(f"  {m}"))
 
@@ -68,7 +68,7 @@ def main():
             )
         return
 
-    from db import save_run
+    from whowork.db import save_run
     save_run(df, region="all")
 
     xlsx_path = save_xlsx(df, region="all")

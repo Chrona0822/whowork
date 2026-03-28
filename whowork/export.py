@@ -17,7 +17,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 
-OUTPUT_DIR = Path("output")
+OUTPUT_DIR = Path(__file__).parent.parent / "data"
 
 # Header background colours per region
 REGION_COLORS = {
