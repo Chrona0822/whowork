@@ -403,6 +403,11 @@
         color: #475569;
         border: 1px solid #e2e8f0;
       }
+      .sum-lang-sv {
+        background: #fff3e0;
+        color: #b45309;
+        border: 1px solid #fed7aa;
+      }
     </style>
   </head>
   <body>
@@ -682,6 +687,9 @@
                   {% endif %} {% for skill in (s.tech_stack or [])[:4] %}
                   <span class="sum-tag sum-skill">{{ skill }}</span>
                   {% endfor %}
+                  {% if s.lang == 'sv' %}
+                  <span class="sum-tag sum-lang-sv">🇸🇪</span>
+                  {% endif %}
                 </div>
                 {% endif %}
               </td>
@@ -767,7 +775,10 @@
         try {
           const res = await fetch(`/enrich/${runId}`, { method: "POST" });
           const data = await res.json();
-          if (data.count > 0) {
+          if (data.count === -1) {
+            btn.textContent = "⚠ Ollama not running";
+            btn.disabled = false;
+          } else if (data.count > 0) {
             location.reload();
           } else {
             btn.textContent = "✓ All enriched";

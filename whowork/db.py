@@ -57,10 +57,11 @@ def init_db() -> None:
         """)
         # Migrations for existing databases
         for sql in [
-            "ALTER TABLE jobs ADD COLUMN applied   INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE jobs ADD COLUMN progress  TEXT    NOT NULL DEFAULT ''",
-            "ALTER TABLE jobs ADD COLUMN deadline  TEXT    NOT NULL DEFAULT ''",
-            "ALTER TABLE jobs ADD COLUMN summary   TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN applied      INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE jobs ADD COLUMN progress     TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN deadline     TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN summary      TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN description  TEXT    NOT NULL DEFAULT ''",
         ]:
             try:
                 con.execute(sql)
@@ -78,8 +79,8 @@ def save_run(df, region: str) -> int:
         )
         run_id = cur.lastrowid
         con.executemany(
-            """INSERT INTO jobs (run_id, title, company, location, date_posted, deadline, site, job_url)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO jobs (run_id, title, company, location, date_posted, deadline, site, job_url, description)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
                     run_id,
@@ -90,6 +91,7 @@ def save_run(df, region: str) -> int:
                     _safe_str(row.get("deadline")),
                     _safe_str(row.get("site")),
                     _safe_str(row.get("job_url")),
+                    _safe_str(row.get("description")),
                 )
                 for _, row in df.iterrows()
             ],
