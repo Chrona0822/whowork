@@ -53,6 +53,10 @@ def post_to_discord(df, count: int, xlsx_path) -> None:
 def main():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting job search...")
 
+    from whowork.health import run_checks, print_banner
+    results = run_checks()
+    print_banner(results)
+
     from whowork.search import run_search
     from whowork.export import save_xlsx
 

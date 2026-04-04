@@ -46,6 +46,15 @@ async def on_ready():
 # ── Shared search helper ───────────────────────────────────────────────────────
 
 async def _run_and_respond(ctx, region: str, label: str):
+    from whowork.health import run_checks
+    results = await asyncio.get_event_loop().run_in_executor(None, run_checks, True)
+    failures = [name for name, (ok, msg) in results.items() if not ok]
+    if failures:
+        warn = "⚠ " + ", ".join(
+            f"**{name}** — {msg}" for name, (ok, msg) in results.items() if not ok
+        )
+        await ctx.send(warn)
+
     status_msg = await ctx.send(f"Searching **{label}** jobs... ⏳")
 
     messages = []
@@ -150,9 +159,23 @@ async def help_command(ctx):
         "`!status` — Show how many jobs have been seen so far\n"
         "`!reset`  — Clear seen-jobs history (next search resurfaces all jobs)\n"
         "`!restart`— Restart the bot\n"
+        "`!health` — Check Ollama, Web UI, and Database status\n"
         "`!help`   — Show this message\n\n"
         f"_Results are saved to {WEB_URL} — mark jobs as applied there._"
     )
+
+
+# ── !health ───────────────────────────────────────────────────────────────────
+
+@bot.command(name="health")
+async def health_command(ctx):
+    from whowork.health import run_checks
+    results = await asyncio.get_event_loop().run_in_executor(None, run_checks, True)
+    lines = ["**Service Health**"]
+    for name, (ok, msg) in results.items():
+        icon = "✅" if ok else "❌"
+        lines.append(f"{icon} **{name}**: {msg}")
+    await ctx.send("\n".join(lines))
 
 
 # ── !reset ─────────────────────────────────────────────────────────────────────
