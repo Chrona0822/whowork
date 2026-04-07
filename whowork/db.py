@@ -102,7 +102,7 @@ def save_run(df, region: str) -> int:
 def get_runs() -> list:
     init_db()
     with _conn() as con:
-        return con.execute("SELECT * FROM runs ORDER BY id DESC").fetchall()
+        return con.execute("SELECT * FROM runs WHERE region != 'manual' ORDER BY id DESC").fetchall()
 
 
 def get_jobs(run_id: int) -> list:
@@ -143,8 +143,38 @@ def save_summary(job_id: int, summary_json: str) -> None:
 
 
 def set_progress(job_id: int, value: str) -> str:
-    allowed = {"", "interview", "closed"}
+    allowed = {"", "hr_call", "interview", "oa_done", "closed"}
     value = value if value in allowed else ""
     with _conn() as con:
         con.execute("UPDATE jobs SET progress = ? WHERE id = ?", (value, job_id))
     return value
+
+
+def _get_or_create_manual_run() -> int:
+    """Return the id of the single 'manual' run, creating it if needed."""
+    with _conn() as con:
+        row = con.execute("SELECT id FROM runs WHERE region = 'manual' LIMIT 1").fetchone()
+        if row:
+            return row["id"]
+        cur = con.execute(
+            "INSERT INTO runs (timestamp, region, count) VALUES (?, 'manual', 0)",
+            (datetime.now().strftime("%Y-%m-%d %H:%M"),),
+        )
+        return cur.lastrowid
+
+
+def add_manual_job(title: str, company: str, location: str, job_url: str) -> int:
+    """Insert a manually-tracked application. Returns the new job id."""
+    init_db()
+    run_id = _get_or_create_manual_run()
+    today  = datetime.now().strftime("%Y-%m-%d")
+    with _conn() as con:
+        cur = con.execute(
+            """INSERT INTO jobs (run_id, title, company, location, date_posted, site, job_url, applied)
+               VALUES (?, ?, ?, ?, ?, 'manual', ?, 1)""",
+            (run_id, title.strip(), company.strip(), location.strip(), today, job_url.strip()),
+        )
+        job_id = cur.lastrowid
+        # keep run.count in sync
+        con.execute("UPDATE runs SET count = count + 1 WHERE id = ?", (run_id,))
+    return job_id

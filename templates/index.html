@@ -138,15 +138,19 @@
         color: inherit;
         display: block;
       }
-      a.stat:hover {
+      a.stat:hover,
+      div.stat:hover {
         background: #f0f2f5;
       }
-      a.stat.active-filter {
+      a.stat.active-filter,
+      div.stat.active-filter {
         background: #2563eb;
         color: #fff;
       }
       a.stat.active-filter strong,
-      a.stat.active-filter span {
+      a.stat.active-filter span,
+      div.stat.active-filter strong,
+      div.stat.active-filter span {
         color: #fff;
       }
       .stat strong {
@@ -273,16 +277,59 @@
         cursor: pointer;
         color: #374151;
       }
+      .progress-select.hr_call {
+        background: #ede9fe;
+        color: #6d28d9;
+        border-color: #c4b5fd;
+      }
       .progress-select.interview {
         background: #fef3c7;
         color: #d97706;
         border-color: #fde68a;
+      }
+      .progress-select.oa_done {
+        background: #dcfce7;
+        color: #15803d;
+        border-color: #86efac;
       }
       .progress-select.closed {
         background: #fee2e2;
         color: #dc2626;
         border-color: #fecaca;
       }
+
+      /* Manual add modal */
+      .modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 500;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-backdrop.open { display: flex; }
+      .modal {
+        background: #fff;
+        border-radius: 10px;
+        padding: 24px 28px;
+        width: 420px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      }
+      .modal h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: #1a2535; }
+      .modal label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+      .modal input {
+        width: 100%; padding: 7px 10px; border: 1px solid #d1d5db;
+        border-radius: 6px; font-size: 13px; margin-bottom: 12px; outline: none;
+      }
+      .modal input:focus { border-color: #2563eb; }
+      .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+      .modal-actions button {
+        padding: 6px 16px; border-radius: 6px; font-size: 13px;
+        font-weight: 600; cursor: pointer; border: none;
+      }
+      .btn-cancel { background: #f3f4f6; color: #374151; }
+      .btn-save   { background: #2563eb; color: #fff; }
 
       /* Empty / home states */
       .empty {
@@ -445,69 +492,110 @@
         <p>Open a run and click <strong>Mark applied</strong> on a job.</p>
       </div>
       {% else %}
-      <div class="stats" style="margin-bottom: 22px">
-        <div class="stat">
-          <strong>{{ applied | length }}</strong><span>Total applied</span>
+      {% set n_inprogress = applied | rejectattr("progress","equalto","") | rejectattr("progress","equalto","closed") | list | length %}
+      <div class="stats" style="margin-bottom: 16px">
+        <div class="stat" id="stat-total" onclick="homeStatFilter('total')" style="cursor:pointer">
+          <strong>{{ applied | length }}</strong><span>Total</span>
         </div>
-        <div class="stat">
-          <strong
-            >{{ applied | selectattr("progress","equalto","interview") | list |
-            length }}</strong
-          ><span>Interview</span>
+        <div class="stat" id="stat-inprogress" onclick="homeStatFilter('inprogress')" style="cursor:pointer">
+          <strong>{{ n_inprogress }}</strong><span>In progress</span>
         </div>
-        <div class="stat">
-          <strong
-            >{{ applied | selectattr("progress","equalto","closed") | list |
-            length }}</strong
-          ><span>Closed</span>
+        <div class="stat" onclick="openAddModal()" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:70px; color:#2563eb; border: 1px dashed #bfdbfe;">
+          <strong style="font-size:24px; line-height:1; color:#2563eb">+</strong>
+          <span style="color:#2563eb">application</span>
         </div>
       </div>
       <div class="table-wrap">
-        <table>
+        <table id="home-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Title</th>
-              <th>Company</th>
-              <th>Location</th>
-              <th>Progress</th>
-              <th>Run</th>
-              <th>Source</th>
+              <th class="filterable" onclick="toggleFilter(this, event)">
+                Title <span class="filter-tri">▼</span>
+                <div class="filter-dropdown" onclick="event.stopPropagation()">
+                  <input type="text" data-home-col="1" placeholder="Filter title…" oninput="filterHomeTable()" />
+                </div>
+              </th>
+              <th class="filterable" onclick="toggleFilter(this, event)">
+                Company <span class="filter-tri">▼</span>
+                <div class="filter-dropdown" onclick="event.stopPropagation()">
+                  <input type="text" data-home-col="2" placeholder="Filter company…" oninput="filterHomeTable()" />
+                </div>
+              </th>
+              <th class="filterable" onclick="toggleFilter(this, event)">
+                Location <span class="filter-tri">▼</span>
+                <div class="filter-dropdown" onclick="event.stopPropagation()">
+                  <input type="text" data-home-col="3" placeholder="Filter location…" oninput="filterHomeTable()" />
+                </div>
+              </th>
+              <th class="filterable" onclick="toggleFilter(this, event)">
+                Progress <span class="filter-tri">▼</span>
+                <div class="filter-dropdown" onclick="event.stopPropagation()">
+                  <select data-home-progress onchange="filterHomeTable()">
+                    <option value="">All</option>
+                    <option value="hr_call">HR Call</option>
+                    <option value="interview">Interview</option>
+                    <option value="oa_done">OA Done</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+              </th>
+              <th>Date</th>
+              <th class="filterable" onclick="toggleFilter(this, event)">
+                Source <span class="filter-tri">▼</span>
+                <div class="filter-dropdown" onclick="event.stopPropagation()">
+                  <input type="text" data-home-col="6" placeholder="Filter source…" oninput="filterHomeTable()" />
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
             {% for job in applied %}
-            <tr>
+            <tr data-progress="{{ job.progress }}" data-job-id="{{ job.id }}">
               <td style="color: #aaa">{{ loop.index }}</td>
               <td class="title-cell">
                 {% if job.job_url %}
-                <a
-                  href="{{ job.job_url }}"
-                  target="_blank"
-                  title="{{ job.title }}"
-                  >{{ job.title }}</a
-                >
-                {% else %} {{ job.title }} {% endif %}
+                <a href="{{ job.job_url }}" target="_blank" title="{{ job.title }}">{{ job.title }}</a>
+                {% else %}{{ job.title }}{% endif %}
               </td>
               <td>{{ job.company }}</td>
               <td>{{ job.location | short_location }}</td>
               <td class="action-cell">
                 <select class="progress-select {{ job.progress }}" onchange="setProgress({{ job.id }}, this)">
-                  <option value="" {% if not job.progress %}selected{% endif %}></option>
-                  <option value="interview" {% if job.progress == "interview" %}selected{% endif %}>Interview</option>
-                  <option value="closed" {% if job.progress == "closed" %}selected{% endif %}>Closed</option>
+                  <option value=""          {% if not job.progress              %}selected{% endif %}></option>
+                  <option value="hr_call"   {% if job.progress == "hr_call"    %}selected{% endif %}>HR Call</option>
+                  <option value="interview" {% if job.progress == "interview"  %}selected{% endif %}>Interview</option>
+                  <option value="oa_done"   {% if job.progress == "oa_done"   %}selected{% endif %}>OA Done</option>
+                  <option value="closed"    {% if job.progress == "closed"     %}selected{% endif %}>Closed</option>
                 </select>
               </td>
-              <td style="color: #888; white-space: nowrap">
-                {{ job.run_timestamp[:10] }}
-              </td>
+              <td style="color: #888; white-space: nowrap">{{ job.run_timestamp[:10] }}</td>
               <td style="color: #aaa">{{ job.site }}</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-      {% endif %} {# ════════════════ RUN PAGE ════════════════ #} {% elif page
+      {% endif %}
+
+      <!-- Manual add modal -->
+      <div class="modal-backdrop" id="add-modal" onclick="if(event.target===this)closeAddModal()">
+        <div class="modal">
+          <h2>Add application manually</h2>
+          <label>Job title *</label>
+          <input id="m-title" type="text" placeholder="e.g. Backend Engineer" />
+          <label>Company *</label>
+          <input id="m-company" type="text" placeholder="e.g. Spotify" />
+          <label>Location</label>
+          <input id="m-location" type="text" placeholder="e.g. Stockholm, Sweden" />
+          <label>Job URL</label>
+          <input id="m-url" type="url" placeholder="https://…" />
+          <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
+            <button class="btn-save"   onclick="submitManual()">Save</button>
+          </div>
+        </div>
+      </div> {# ════════════════ RUN PAGE ════════════════ #} {% elif page
       == 'run' and selected %} {% set applied_count = all_jobs |
       selectattr("applied", "equalto", 1) | list | length %} {% set total =
       all_jobs | length %}
@@ -717,9 +805,11 @@
               {% if filter_mode == 'applied' %}
               <td class="action-cell">
                 <select class="progress-select {{ job.progress }}" onchange="setProgress({{ job.id }}, this)">
-                  <option value="" {% if not job.progress %}selected{% endif %}>—</option>
-                  <option value="interview" {% if job.progress == "interview" %}selected{% endif %}>Interview</option>
-                  <option value="closed" {% if job.progress == "closed" %}selected{% endif %}>Closed</option>
+                  <option value=""          {% if not job.progress              %}selected{% endif %}></option>
+                  <option value="hr_call"   {% if job.progress == "hr_call"    %}selected{% endif %}>HR Call</option>
+                  <option value="interview" {% if job.progress == "interview"  %}selected{% endif %}>Interview</option>
+                  <option value="oa_done"   {% if job.progress == "oa_done"   %}selected{% endif %}>OA Done</option>
+                  <option value="closed"    {% if job.progress == "closed"     %}selected{% endif %}>Closed</option>
                 </select>
               </td>
               {% endif %}
@@ -843,6 +933,87 @@
           stats[1].textContent = total - dimmed;
           stats[2].textContent = dimmed;
         }
+      }
+
+      // ── Home page column filter ────────────────────────────────
+      function filterHomeTable() {
+        const rows = document.querySelectorAll("#home-table tbody tr");
+        const colFilters = document.querySelectorAll("[data-home-col]");
+        const progressFilter = document.querySelector("[data-home-progress]");
+        rows.forEach(row => {
+          let show = true;
+          colFilters.forEach(f => {
+            const val = f.value.toLowerCase().trim();
+            if (!val) return;
+            const cell = row.cells[parseInt(f.dataset.homeCol)];
+            if (cell && !cell.textContent.toLowerCase().includes(val)) show = false;
+          });
+          if (progressFilter && progressFilter.value && row.dataset.progress !== progressFilter.value) show = false;
+          row.style.display = show ? "" : "none";
+        });
+      }
+
+      // ── Manual add modal ───────────────────────────────────────
+      function openAddModal() {
+        document.getElementById("add-modal").classList.add("open");
+        document.getElementById("m-title").focus();
+      }
+      function closeAddModal() {
+        document.getElementById("add-modal").classList.remove("open");
+        ["m-title","m-company","m-location","m-url"].forEach(id => document.getElementById(id).value = "");
+      }
+      async function submitManual() {
+        const title   = document.getElementById("m-title").value.trim();
+        const company = document.getElementById("m-company").value.trim();
+        if (!title || !company) {
+          alert("Title and Company are required.");
+          return;
+        }
+        await fetch("/add_manual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            company,
+            location: document.getElementById("m-location").value.trim(),
+            job_url:  document.getElementById("m-url").value.trim(),
+          }),
+        });
+        location.reload();
+      }
+      document.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeAddModal();
+      });
+
+      // ── Home stat filter buttons ───────────────────────────────
+      let activeStatFilter = null;
+      function homeStatFilter(mode) {
+        const rows = document.querySelectorAll("#home-table tbody tr");
+        const statTotal = document.getElementById("stat-total");
+        const statInprogress = document.getElementById("stat-inprogress");
+
+        if (activeStatFilter === mode) {
+          // Toggle off — show all
+          activeStatFilter = null;
+          statTotal.classList.remove("active-filter");
+          statInprogress.classList.remove("active-filter");
+          rows.forEach(r => r.style.display = "");
+          return;
+        }
+
+        activeStatFilter = mode;
+        statTotal.classList.toggle("active-filter", mode === "total");
+        statInprogress.classList.toggle("active-filter", mode === "inprogress");
+
+        rows.forEach(row => {
+          const progress = row.dataset.progress || "";
+          if (mode === "total") {
+            row.style.display = "";
+          } else if (mode === "inprogress") {
+            const active = progress !== "" && progress !== "closed";
+            row.style.display = active ? "" : "none";
+          }
+        });
       }
     </script>
   </body>

@@ -7,7 +7,7 @@ Open: http://localhost:8080
 import json
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
-from whowork.db import delete_run, get_all_applied, get_jobs, get_runs, init_db, set_progress, toggle_applied
+from whowork.db import add_manual_job, delete_run, get_all_applied, get_jobs, get_runs, init_db, set_progress, toggle_applied
 
 app = Flask(__name__)
 
@@ -148,6 +148,18 @@ def toggle(job_id):
 def update_progress(job_id):
     value = request.json.get("value", "")
     return jsonify({"progress": set_progress(job_id, value)})
+
+
+@app.route("/add_manual", methods=["POST"])
+def add_manual():
+    data = request.json
+    job_id = add_manual_job(
+        title=data.get("title", ""),
+        company=data.get("company", ""),
+        location=data.get("location", ""),
+        job_url=data.get("job_url", ""),
+    )
+    return jsonify({"id": job_id})
 
 
 if __name__ == "__main__":

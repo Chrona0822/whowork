@@ -132,7 +132,7 @@ def assign_location_priority(location_str: str) -> int:
 
 # ── JobSpy (LinkedIn + Indeed) ─────────────────────────────────────────────────
 
-def _search_jobspy_country(query: str, country: dict) -> pd.DataFrame:
+def _search_jobspy_country(query: str, country: dict, hours_old: int = HOURS_OLD) -> pd.DataFrame:
     """Search one query across an entire country (not city-by-city)."""
     try:
         from jobspy import scrape_jobs
@@ -141,9 +141,9 @@ def _search_jobspy_country(query: str, country: dict) -> pd.DataFrame:
             search_term=query,
             location=country["country"],          # country-level → broader results
             results_wanted=RESULTS_PER_CALL,
-            hours_old=HOURS_OLD,
+            hours_old=hours_old,
             country_indeed=country["indeed_country"],
-            linkedin_fetch_description=False,
+            linkedin_fetch_description=True,
         )
         if not df.empty:
             df["search_query"] = query
@@ -153,7 +153,7 @@ def _search_jobspy_country(query: str, country: dict) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def search_all_jobspy(status_callback=None, region: str = "all") -> pd.DataFrame:
+def search_all_jobspy(status_callback=None, region: str = "all", hours_old: int = HOURS_OLD) -> pd.DataFrame:
     """
     For each position query, search all relevant countries in parallel.
 
@@ -178,7 +178,7 @@ def search_all_jobspy(status_callback=None, region: str = "all") -> pd.DataFrame
             )
 
         with ThreadPoolExecutor(max_workers=len(countries)) as pool:
-            futures = {pool.submit(_search_jobspy_country, query, c): c for c in countries}
+            futures = {pool.submit(_search_jobspy_country, query, c, hours_old): c for c in countries}
             for future in as_completed(futures):
                 df = future.result()
                 if not df.empty:
@@ -550,7 +550,7 @@ search_su_varbi = search_uni_feeds  # keep old name working
 
 # ── Main entry point ───────────────────────────────────────────────────────────
 
-def run_search(status_callback=None, region: str = "all") -> tuple[pd.DataFrame, int]:
+def run_search(status_callback=None, region: str = "all", hours_old: int = HOURS_OLD) -> tuple[pd.DataFrame, int]:
     """
     Returns (output_df, new_job_count).
     region: "all" | "sweden" | "eu" | "academic"
@@ -566,7 +566,7 @@ def run_search(status_callback=None, region: str = "all") -> tuple[pd.DataFrame,
     if region != "academic":
         if status_callback:
             status_callback("Starting LinkedIn/Indeed search...")
-        df_boards = search_all_jobspy(status_callback, region=region)
+        df_boards = search_all_jobspy(status_callback, region=region, hours_old=hours_old)
         if not df_boards.empty:
             frames.append(df_boards)
 
