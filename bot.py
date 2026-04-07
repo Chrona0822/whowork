@@ -2,10 +2,11 @@
 Discord bot for job alerts.
 
 Commands:
-  !jobsv   — Sweden only (Stockholm → Gothenburg → Malmö → other SE)
-  !jobeu   — Europe excl. Sweden (Denmark, Germany, ...) + academic RSS
-  !status  — how many jobs have been seen so far
-  !reset   — clear seen-jobs history
+  !jobsv    — Sweden only (Stockholm → Gothenburg → Malmö → other SE)
+  !jobeu    — Europe excl. Sweden (Denmark, Germany, ...) — 24h window
+  !jobeu7d  — Europe excl. Sweden — 7-day window
+  !status   — how many jobs have been seen so far
+  !reset    — clear seen-jobs history
 """
 
 import asyncio
@@ -45,8 +46,12 @@ async def on_ready():
 
 # ── Shared search helper ───────────────────────────────────────────────────────
 
-async def _run_and_respond(ctx, region: str, label: str):
+async def _run_and_respond(ctx, region: str, label: str, hours_old: int = None):
     from whowork.health import run_checks
+    from whowork.config import HOURS_OLD as DEFAULT_HOURS
+    if hours_old is None:
+        hours_old = DEFAULT_HOURS
+
     results = await asyncio.get_event_loop().run_in_executor(None, run_checks, True)
     failures = [name for name, (ok, msg) in results.items() if not ok]
     if failures:
@@ -55,6 +60,7 @@ async def _run_and_respond(ctx, region: str, label: str):
         )
         await ctx.send(warn)
 
+    window = f"{hours_old // 24}d" if hours_old >= 24 else f"{hours_old}h"
     status_msg = await ctx.send(f"Searching **{label}** jobs... ⏳")
 
     messages = []
@@ -64,12 +70,13 @@ async def _run_and_respond(ctx, region: str, label: str):
         return run_search(
             status_callback=lambda m: messages.append(m),
             region=region,
+            hours_old=hours_old,
         )
 
     df, count = await asyncio.get_event_loop().run_in_executor(None, _search)
 
     if count == 0:
-        await status_msg.edit(content=f"No new **{label}** jobs found in the past 24h.")
+        await status_msg.edit(content=f"No new **{label}** jobs found in the past {window}.")
         return
 
     # Persist to DB
@@ -113,6 +120,13 @@ async def jobeu_command(ctx):
     await _run_and_respond(ctx, region="eu", label="Europe (non-SE)")
 
 
+# ── !jobeu7d — Europe excl. Sweden, 7-day window ──────────────────────────────
+
+@bot.command(name="jobeu7d")
+async def jobeu7d_command(ctx):
+    await _run_and_respond(ctx, region="eu", label="Europe (non-SE, 7d)", hours_old=168)
+
+
 # ── !jobac — Academic / research roles ────────────────────────────────────────
 
 @bot.command(name="jobac")
@@ -154,7 +168,8 @@ async def help_command(ctx):
     await ctx.send(
         "**Job Alert Bot — Commands**\n\n"
         "`!jobsv`  — Search Sweden (Stockholm → Gothenburg → Malmö)\n"
-        "`!jobeu`  — Search Europe excl. Sweden (Denmark, Germany, ...)\n"
+        "`!jobeu`   — Search Europe excl. Sweden (Denmark, Germany, ...) — 24h\n"
+        "`!jobeu7d` — Same as !jobeu but with a 7-day window\n"
         "`!jobac`  — Search academic & research roles (Euraxess + jobs.ac.uk + KTH + SU Varbi, 7-day window)\n"
         "`!status` — Show how many jobs have been seen so far\n"
         "`!reset`  — Clear seen-jobs history (next search resurfaces all jobs)\n"

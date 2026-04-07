@@ -17,6 +17,8 @@ JOBSPY_QUERIES = [
     "machine learning engineer"
     "Ml engineer"
     "ml engineer intern"
+    "ML traniee"
+    "developer trainee"
     "full stack developer intern"
 ]
 
