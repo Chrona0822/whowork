@@ -11,6 +11,7 @@ Commands:
 
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -106,11 +107,26 @@ async def _run_and_respond(ctx, region: str, label: str, hours_old: int = None):
     await ctx.send("\n".join(lines))
 
 
-# ── !jobsv — Sweden only ───────────────────────────────────────────────────────
+# ── !jobsv — Sweden only (fixed 24h) ──────────────────────────────────────────
 
 @bot.command(name="jobsv")
 async def jobsv_command(ctx):
     await _run_and_respond(ctx, region="sweden", label="Sweden")
+
+
+# ── !jobsv<N> — Sweden, dynamic hour window ───────────────────────────────────
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    m = re.fullmatch(r"!jobsv(\d+)", message.content.strip())
+    if m:
+        hours = int(m.group(1))
+        ctx = await bot.get_context(message)
+        await _run_and_respond(ctx, region="sweden", label=f"Sweden ({hours}h)", hours_old=hours)
+        return
+    await bot.process_commands(message)
 
 
 # ── !jobeu — Europe excl. Sweden ──────────────────────────────────────────────
@@ -167,7 +183,8 @@ async def restart_command(ctx):
 async def help_command(ctx):
     await ctx.send(
         "**Job Alert Bot — Commands**\n\n"
-        "`!jobsv`  — Search Sweden (Stockholm → Gothenburg → Malmö)\n"
+        "`!jobsv`      — Search Sweden (Stockholm → Gothenburg → Malmö) — 24h\n"
+        "`!jobsv<N>`   — Same but N hours back (e.g. !jobsv48 = last 48h)\n"
         "`!jobeu`   — Search Europe excl. Sweden (Denmark, Germany, ...) — 24h\n"
         "`!jobeu7d` — Same as !jobeu but with a 7-day window\n"
         "`!jobac`  — Search academic & research roles (Euraxess + jobs.ac.uk + KTH + SU Varbi, 7-day window)\n"

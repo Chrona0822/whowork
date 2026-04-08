@@ -20,6 +20,7 @@ JOBSPY_QUERIES = [
     "ML traniee"
     "developer trainee"
     "full stack developer intern"
+    "AI engineer"
 ]
 
 # Academic queries (Euraxess + jobs.ac.uk)
