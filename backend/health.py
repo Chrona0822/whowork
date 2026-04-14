@@ -7,11 +7,11 @@ import sqlite3
 import requests
 from pathlib import Path
 
-from whowork.config import WEB_PORT
+from backend.config import WEB_PORT
 
 OLLAMA_URL = "http://localhost:11434/api/tags"
 WEB_URL    = f"http://localhost:{WEB_PORT}"
-DB_PATH    = Path(__file__).parent.parent / "data" / "jobs.db"
+DB_PATH    = Path(__file__).parent / "data" / "jobs.db"
 
 
 def _check_ollama() -> tuple[bool, str]:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DB_PATH = Path(__file__).parent.parent / "data" / "jobs.db"
+DB_PATH = Path(__file__).parent / "data" / "jobs.db"
 
 
 def _conn():
@@ -62,6 +62,7 @@ def init_db() -> None:
             "ALTER TABLE jobs ADD COLUMN deadline     TEXT    NOT NULL DEFAULT ''",
             "ALTER TABLE jobs ADD COLUMN summary      TEXT    NOT NULL DEFAULT ''",
             "ALTER TABLE jobs ADD COLUMN description  TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE jobs ADD COLUMN favorite     INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 con.execute(sql)
@@ -129,6 +130,12 @@ def toggle_applied(job_id: int) -> int:
     with _conn() as con:
         con.execute("UPDATE jobs SET applied = 1 - applied WHERE id = ?", (job_id,))
         return con.execute("SELECT applied FROM jobs WHERE id = ?", (job_id,)).fetchone()["applied"]
+
+
+def toggle_favorite(job_id: int) -> int:
+    with _conn() as con:
+        con.execute("UPDATE jobs SET favorite = 1 - favorite WHERE id = ?", (job_id,))
+        return con.execute("SELECT favorite FROM jobs WHERE id = ?", (job_id,)).fetchone()["favorite"]
 
 
 def delete_run(run_id: int) -> None:

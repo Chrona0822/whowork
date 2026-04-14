@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block content %}
+{% if selected %}
+{% set applied_count = all_jobs | selectattr("applied", "equalto", 1) | list | length %}
+{% set total = all_jobs | length %}
+
+<h1 style="display: flex; align-items: center; gap: 14px">
+  <span>
+    {{ selected.timestamp }} &nbsp;<span
+      style="font-weight: 400; color: #888; font-size: 14px"
+      >{{ selected.region | upper }}</span
+    >
+  </span>
+  {% if has_api_key %}
+  <button
+    id="enrich-btn"
+    onclick="enrichRun({{ selected.id }})"
+    style="
+      padding: 4px 12px;
+      border: 1px solid #c4b5fd;
+      border-radius: 5px;
+      background: #fff;
+      color: #6d28d9;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    "
+  >
+    ✨ Enrich
+  </button>
+  {% endif %}
+  <form
+    method="POST"
+    action="/delete_run/{{ selected.id }}"
+    onsubmit="return confirm('Delete this run and all its jobs?');"
+  >
+    <button
+      type="submit"
+      style="
+        padding: 4px 12px;
+        border: 1px solid #fca5a5;
+        border-radius: 5px;
+        background: #fff;
+        color: #dc2626;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      "
+    >
+      Delete run
+    </button>
+  </form>
+</h1>
+
+<div class="stats">
+  <a class="stat {% if filter_mode == 'all' or not filter_mode %}active-filter{% endif %}"
+     href="/run/{{ selected.id }}">
+    <strong>{{ total }}</strong><span>Total</span>
+  </a>
+  <a class="stat {% if filter_mode == 'toapply' %}active-filter{% endif %}"
+     href="/run/{{ selected.id }}?filter=toapply">
+    <strong>{{ total - applied_count }}</strong><span>To apply</span>
+  </a>
+  <a class="stat {% if filter_mode == 'applied' %}active-filter{% endif %}"
+     href="/run/{{ selected.id }}?filter=applied">
+    <strong>{{ applied_count }}</strong><span>Applied</span>
+  </a>
+  <div class="stat stat-fav" id="fav-btn-jobs-table" onclick="toggleFavFilter('jobs-table')">♥</div>
+</div>
+
+{% if filter_mode == 'applied' %}
+<div class="filter-bar">
+  Showing applied jobs only — <a href="/run/{{ selected.id }}">Show all</a>
+</div>
+{% elif filter_mode == 'toapply' %}
+<div class="filter-bar">
+  Showing unapplied jobs only — <a href="/run/{{ selected.id }}">Show all</a>
+</div>
+{% endif %}
+
+<div class="table-wrap">
+  <table id="jobs-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Type <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <select data-col="type" onchange="filterTable()">
+              <option value="">All types</option>
+              <option value="ML">ML</option>
+              <option value="Data">Data</option>
+              <option value="Full Stack">Full Stack</option>
+              <option value="Frontend">Frontend</option>
+              <option value="Backend">Backend</option>
+              <option value="DevOps">DevOps</option>
+              <option value="Dev">Dev</option>
+              <option value="QA">QA</option>
+              <option value="Grad">Grad</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Title <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-col="2" placeholder="Filter title…" oninput="filterTable()" />
+          </div>
+        </th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Company <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-col="3" placeholder="Filter company…" oninput="filterTable()" />
+          </div>
+        </th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Location <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-col="4" placeholder="Filter location…" oninput="filterTable()" />
+          </div>
+        </th>
+        <th>Status</th>
+        <th>Date</th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Source <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-col="7" placeholder="Filter source…" oninput="filterTable()" />
+          </div>
+        </th>
+        {% if filter_mode == 'applied' %}
+        <th>Progress</th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      {% set cat = job.title | job_category %}
+      <tr
+        id="row-{{ job.id }}"
+        data-type="{{ cat }}"
+        data-favorite="{{ job.favorite }}"
+        class="{{ 'dim' if job.applied and filter_mode != 'applied' else '' }}"
+      >
+        <td class="num-cell">{{ loop.index }}<span class="heart-icon {{ 'fav' if job.favorite }}" onclick="toggleFavorite({{ job.id }}, this)">♥</span></td>
+        <td>
+          <span class="type-badge type-{{ cat | replace(' ', '-') }}">{{ cat }}</span>
+        </td>
+        <td class="title-cell">
+          {% if job.job_url %}
+          <a href="{{ job.job_url }}" target="_blank" title="{{ job.title }}">{{ job.title }}</a>
+          {% else %}
+          <span title="{{ job.title }}">{{ job.title }}</span>
+          {% endif %}
+          {% set s = job.summary | parse_summary %}
+          {% if s %}
+          <div class="job-summary">
+            {% if s.years_exp and s.years_exp != 'N/A' %}
+            <span class="sum-tag sum-exp">{{ s.years_exp }}</span>
+            {% endif %}
+            {% if s.level and s.level != 'Any' %}
+            <span class="sum-tag sum-level">{{ s.level }}</span>
+            {% endif %}
+            {% for skill in (s.tech_stack or [])[:4] %}
+            <span class="sum-tag sum-skill">{{ skill }}</span>
+            {% endfor %}
+            {% if s.lang == 'sv' %}
+            <span class="sum-tag sum-lang-sv">🇸🇪</span>
+            {% endif %}
+          </div>
+          {% endif %}
+        </td>
+        <td class="company-cell" title="{{ job.company }}">{{ job.company }}</td>
+        <td>{{ job.location | short_location }}</td>
+        <td class="action-cell">
+          <button
+            class="toggle-btn {{ 'done' if job.applied else 'pending' }}"
+            onclick="toggleApplied({{ job.id }}, this)"
+          >
+            {{ 'Applied ✓' if job.applied else 'Mark applied' }}
+          </button>
+        </td>
+        <td style="white-space: nowrap; color: #888; line-height: 1.5">
+          {{ job.date_posted | format_date }}
+          {% if job.deadline and job.deadline not in ('', 'nan', 'none') %}
+          <br /><span style="font-size: 11px; color: #b45309" title="Application deadline">↯ {{ job.deadline }}</span>
+          {% endif %}
+        </td>
+        <td style="color: #aaa">{{ job.site }}</td>
+        {% if filter_mode == 'applied' %}
+        <td class="action-cell">
+          <select class="progress-select {{ job.progress }}" onchange="setProgress({{ job.id }}, this)">
+            <option value=""          {% if not job.progress              %}selected{% endif %}></option>
+            <option value="hr_call"   {% if job.progress == "hr_call"    %}selected{% endif %}>HR Call</option>
+            <option value="interview" {% if job.progress == "interview"  %}selected{% endif %}>Interview</option>
+            <option value="oa_done"   {% if job.progress == "oa_done"    %}selected{% endif %}>OA Done</option>
+            <option value="closed"    {% if job.progress == "closed"     %}selected{% endif %}>Closed</option>
+          </select>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="empty">
+  <p>No search runs yet.</p>
+  <p>
+    Type <code>!jobsv</code> or <code>!jobeu</code> in Discord to run a search.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

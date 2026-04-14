@@ -7,7 +7,7 @@ Open: http://localhost:8080
 import json
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
-from whowork.db import add_manual_job, delete_run, get_all_applied, get_jobs, get_runs, init_db, set_progress, toggle_applied
+from backend.db import add_manual_job, delete_run, get_all_applied, get_jobs, get_runs, init_db, set_progress, toggle_applied, toggle_favorite
 
 app = Flask(__name__)
 
@@ -109,8 +109,8 @@ def format_date(val: str) -> str:
 def index():
     runs    = get_runs()
     applied = get_all_applied()
-    return render_template("index.html", runs=runs, applied=applied, page="home",
-                           selected=None, jobs=[], all_jobs=[], filter_mode="all")
+    return render_template("home.html", runs=runs, applied=applied, page="home",
+                           selected=None)
 
 
 @app.route("/run/<int:run_id>")
@@ -118,12 +118,16 @@ def run_view(run_id):
     filter_mode = request.args.get("filter", "all")
     runs     = get_runs()
     all_jobs = _sort_jobs(get_jobs(run_id))
-    jobs     = [j for j in all_jobs if j["applied"]] if filter_mode == "applied" else all_jobs
+    if filter_mode == "applied":
+        jobs = [j for j in all_jobs if j["applied"]]
+    elif filter_mode == "toapply":
+        jobs = [j for j in all_jobs if not j["applied"]]
+    else:
+        jobs = all_jobs
     selected = next((r for r in runs if r["id"] == run_id), None)
-    return render_template("index.html", runs=runs, jobs=jobs, all_jobs=all_jobs,
+    return render_template("run.html", runs=runs, jobs=jobs, all_jobs=all_jobs,
                            selected=selected, filter_mode=filter_mode,
-                           has_api_key=True,
-                           page="run", applied=[])
+                           has_api_key=True, page="run")
 
 
 @app.route("/delete_run/<int:run_id>", methods=["POST"])
@@ -134,7 +138,7 @@ def delete_run_view(run_id):
 
 @app.route("/enrich/<int:run_id>", methods=["POST"])
 def enrich_run_view(run_id):
-    from whowork.summarize import enrich_run
+    from backend.summarize import enrich_run
     count = enrich_run(run_id)
     return jsonify({"count": count})
 
@@ -142,6 +146,11 @@ def enrich_run_view(run_id):
 @app.route("/toggle/<int:job_id>", methods=["POST"])
 def toggle(job_id):
     return jsonify({"applied": toggle_applied(job_id)})
+
+
+@app.route("/toggle_favorite/<int:job_id>", methods=["POST"])
+def toggle_fav(job_id):
+    return jsonify({"favorite": toggle_favorite(job_id)})
 
 
 @app.route("/set_progress/<int:job_id>", methods=["POST"])
@@ -164,6 +173,6 @@ def add_manual():
 
 if __name__ == "__main__":
     init_db()
-    from whowork.config import WEB_PORT, WEB_URL
+    from backend.config import WEB_PORT, WEB_URL
     print(f"Job tracker running at {WEB_URL}")
     app.run(port=WEB_PORT, debug=False)

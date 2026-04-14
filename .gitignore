@@ -3,7 +3,6 @@
 seen_jobs.txt
 .restart_channel
 jobs.db
-logs/
 output/
 __pycache__/
 *.pyc
