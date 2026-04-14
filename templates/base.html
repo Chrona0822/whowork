@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Job Tracker</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <!-- ── Sidebar ──────────────────────────────────────────────── -->
+    <nav id="sidebar">
+      <a class="home-link {% if page == 'home' %}active{% endif %}" href="/">
+        🏠 Home
+      </a>
+      <div class="section-label">Search Runs</div>
+      {% for run in runs %}
+      <a
+        class="run-link {% if selected and run.id == selected.id %}active{% endif %}"
+        href="/run/{{ run.id }}"
+      >
+        <div class="run-date">{{ run.timestamp }}</div>
+        <div class="run-meta">
+          <span class="badge badge-{{ run.region }}">{{ run.region }}</span>
+          {{ run.count }} job(s)
+        </div>
+      </a>
+      {% endfor %}
+      {% if not runs %}
+      <div style="padding: 16px; font-size: 12px; opacity: 0.5">
+        No runs yet.<br />Use !jobsv or !jobeu in Discord.
+      </div>
+      {% endif %}
+    </nav>
+
+    <!-- ── Main ─────────────────────────────────────────────────── -->
+    <main id="main">
+      {% block content %}{% endblock %}
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

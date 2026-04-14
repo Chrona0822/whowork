@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>All Applied Jobs</h1>
+{% if not applied %}
+<div class="empty">
+  <p>No applied jobs yet.</p>
+  <p>Open a run and click <strong>Mark applied</strong> on a job.</p>
+</div>
+{% else %}
+{% set n_inprogress = applied | rejectattr("progress","equalto","") | rejectattr("progress","equalto","closed") | list | length %}
+<div class="stats" style="margin-bottom: 16px">
+  <div class="stat" id="stat-total" onclick="homeStatFilter('total')" style="cursor:pointer">
+    <strong>{{ applied | length }}</strong><span>Total</span>
+  </div>
+  <div class="stat" id="stat-inprogress" onclick="homeStatFilter('inprogress')" style="cursor:pointer">
+    <strong>{{ n_inprogress }}</strong><span>In progress</span>
+  </div>
+  <div class="stat stat-fav" id="fav-btn-home-table" onclick="toggleFavFilter('home-table')">♥</div>
+  <div class="stat" onclick="openAddModal()" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:70px; color:#2563eb; border: 1px dashed #bfdbfe;">
+    <strong style="font-size:24px; line-height:1; color:#2563eb">+</strong>
+    <span style="color:#2563eb">application</span>
+  </div>
+</div>
+<div class="table-wrap">
+  <table id="home-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Title <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-home-col="1" placeholder="Filter title…" oninput="filterHomeTable()" />
+          </div>
+        </th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Company <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-home-col="2" placeholder="Filter company…" oninput="filterHomeTable()" />
+          </div>
+        </th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Location <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-home-col="3" placeholder="Filter location…" oninput="filterHomeTable()" />
+          </div>
+        </th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Progress <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <select data-home-progress onchange="filterHomeTable()">
+              <option value="">All</option>
+              <option value="hr_call">HR Call</option>
+              <option value="interview">Interview</option>
+              <option value="oa_done">OA Done</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+        </th>
+        <th>Date</th>
+        <th class="filterable" onclick="toggleFilter(this, event)">
+          Source <span class="filter-tri">▼</span>
+          <div class="filter-dropdown" onclick="event.stopPropagation()">
+            <input type="text" data-home-col="6" placeholder="Filter source…" oninput="filterHomeTable()" />
+          </div>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in applied %}
+      <tr data-progress="{{ job.progress }}" data-job-id="{{ job.id }}" data-favorite="{{ job.favorite }}">
+        <td class="num-cell">{{ loop.index }}<span class="heart-icon {{ 'fav' if job.favorite }}" onclick="toggleFavorite({{ job.id }}, this)">♥</span></td>
+        <td class="title-cell">
+          {% if job.job_url %}
+          <a href="{{ job.job_url }}" target="_blank" title="{{ job.title }}">{{ job.title }}</a>
+          {% else %}{{ job.title }}{% endif %}
+        </td>
+        <td class="company-cell" title="{{ job.company }}">{{ job.company }}</td>
+        <td>{{ job.location | short_location }}</td>
+        <td class="action-cell">
+          <select class="progress-select {{ job.progress }}" onchange="setProgress({{ job.id }}, this)">
+            <option value=""          {% if not job.progress              %}selected{% endif %}></option>
+            <option value="hr_call"   {% if job.progress == "hr_call"    %}selected{% endif %}>HR Call</option>
+            <option value="interview" {% if job.progress == "interview"  %}selected{% endif %}>Interview</option>
+            <option value="oa_done"   {% if job.progress == "oa_done"    %}selected{% endif %}>OA Done</option>
+            <option value="closed"    {% if job.progress == "closed"     %}selected{% endif %}>Closed</option>
+          </select>
+        </td>
+        <td style="color: #888; white-space: nowrap">{{ job.run_timestamp[:10] }}</td>
+        <td style="color: #aaa">{{ job.site }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Manual add modal -->
+<div class="modal-backdrop" id="add-modal" onclick="if(event.target===this)closeAddModal()">
+  <div class="modal">
+    <h2>Add application manually</h2>
+    <label>Job title *</label>
+    <input id="m-title" type="text" placeholder="e.g. Backend Engineer" />
+    <label>Company *</label>
+    <input id="m-company" type="text" placeholder="e.g. Spotify" />
+    <label>Location</label>
+    <input id="m-location" type="text" placeholder="e.g. Stockholm, Sweden" />
+    <label>Job URL</label>
+    <input id="m-url" type="url" placeholder="https://…" />
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
+      <button class="btn-save"   onclick="submitManual()">Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

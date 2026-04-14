@@ -48,8 +48,8 @@ async def on_ready():
 # ── Shared search helper ───────────────────────────────────────────────────────
 
 async def _run_and_respond(ctx, region: str, label: str, hours_old: int = None):
-    from whowork.health import run_checks
-    from whowork.config import HOURS_OLD as DEFAULT_HOURS
+    from backend.health import run_checks
+    from backend.config import HOURS_OLD as DEFAULT_HOURS
     if hours_old is None:
         hours_old = DEFAULT_HOURS
 
@@ -67,7 +67,7 @@ async def _run_and_respond(ctx, region: str, label: str, hours_old: int = None):
     messages = []
 
     def _search():
-        from whowork.search import run_search
+        from backend.search import run_search
         return run_search(
             status_callback=lambda m: messages.append(m),
             region=region,
@@ -81,11 +81,11 @@ async def _run_and_respond(ctx, region: str, label: str, hours_old: int = None):
         return
 
     # Persist to DB
-    from whowork.db import save_run
+    from backend.db import save_run
     save_run(df, region=region)
 
     # Build inline summary (top 10)
-    from whowork.config import MAX_SUMMARY_JOBS
+    from backend.config import MAX_SUMMARY_JOBS
     lines = [f"**{count} new {label} job(s)** — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"]
     for _, row in df.head(MAX_SUMMARY_JOBS).iterrows():
         title   = str(row.get("title",    ""))[:60]
@@ -100,7 +100,7 @@ async def _run_and_respond(ctx, region: str, label: str, hours_old: int = None):
 
     if count > MAX_SUMMARY_JOBS:
         lines.append(f"\n_…and {count - MAX_SUMMARY_JOBS} more in the attachment._")
-    from whowork.config import WEB_URL
+    from backend.config import WEB_URL
     lines.append(f"\n_Open {WEB_URL} to track applications._")
 
     await status_msg.delete()
@@ -154,7 +154,7 @@ async def jobac_command(ctx):
 
 @bot.command(name="status")
 async def status_command(ctx):
-    from whowork.search import load_seen_jobs, SEEN_JOBS_FILE
+    from backend.search import load_seen_jobs, SEEN_JOBS_FILE
     seen = load_seen_jobs()
     await ctx.send(f"Seen-jobs history: **{len(seen)}** unique jobs in `{SEEN_JOBS_FILE}`.")
 
@@ -201,7 +201,7 @@ async def help_command(ctx):
 
 @bot.command(name="health")
 async def health_command(ctx):
-    from whowork.health import run_checks
+    from backend.health import run_checks
     results = await asyncio.get_event_loop().run_in_executor(None, run_checks, True)
     lines = ["**Service Health**"]
     for name, (ok, msg) in results.items():
@@ -214,7 +214,7 @@ async def health_command(ctx):
 
 @bot.command(name="reset")
 async def reset_command(ctx):
-    from whowork.search import SEEN_JOBS_FILE
+    from backend.search import SEEN_JOBS_FILE
     if os.path.exists(SEEN_JOBS_FILE):
         os.remove(SEEN_JOBS_FILE)
         await ctx.send("History cleared. Next search will surface all matching jobs again.")

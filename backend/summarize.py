@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from bs4 import BeautifulSoup
 
-from whowork.db import get_jobs, save_summary
+from backend.db import get_jobs, save_summary
 
 OLLAMA_URL      = "http://localhost:11434/api/generate"
 OLLAMA_MODEL    = "llama3.2:1b"
