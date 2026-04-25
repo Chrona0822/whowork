@@ -54,6 +54,20 @@ def init_db() -> None:
                 applied     INTEGER NOT NULL DEFAULT 0,
                 progress    TEXT    NOT NULL DEFAULT ''
             );
+            CREATE TABLE IF NOT EXISTS watchlist_jobs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_key TEXT    NOT NULL,
+                title       TEXT    NOT NULL,
+                job_url     TEXT    NOT NULL,
+                post_date   TEXT    NOT NULL DEFAULT '',
+                first_seen  TEXT    NOT NULL,
+                last_seen   TEXT    NOT NULL,
+                UNIQUE(job_url)
+            );
+            CREATE TABLE IF NOT EXISTS watchlist_meta (
+                company_key  TEXT PRIMARY KEY,
+                last_checked TEXT NOT NULL DEFAULT ''
+            );
         """)
         # Migrations for existing databases
         for sql in [
@@ -146,7 +160,24 @@ def delete_run(run_id: int) -> None:
 
 def save_summary(job_id: int, summary_json: str) -> None:
     with _conn() as con:
-        con.execute("UPDATE jobs SET summary = ? WHERE id = ?", (summary_json, job_id))
+        con.execute(
+            "UPDATE jobs SET summary = ?, description = '' WHERE id = ?",
+            (summary_json, job_id),
+        )
+
+
+def clear_descriptions(job_ids: list[int]) -> None:
+    with _conn() as con:
+        con.executemany(
+            "UPDATE jobs SET description = '' WHERE id = ?",
+            [(jid,) for jid in job_ids],
+        )
+
+
+def clear_summaries(run_id: int) -> None:
+    """Clear all summaries for a run so they can be re-enriched."""
+    with _conn() as con:
+        con.execute("UPDATE jobs SET summary = '' WHERE run_id = ?", (run_id,))
 
 
 def set_progress(job_id: int, value: str) -> str:
@@ -185,3 +216,61 @@ def add_manual_job(title: str, company: str, location: str, job_url: str) -> int
         # keep run.count in sync
         con.execute("UPDATE runs SET count = count + 1 WHERE id = ?", (run_id,))
     return job_id
+
+
+def get_watchlist_jobs(company_key: str) -> list:
+    """Return all jobs for a company, newest first_seen first."""
+    init_db()
+    with _conn() as con:
+        return con.execute(
+            "SELECT * FROM watchlist_jobs WHERE company_key = ? ORDER BY first_seen DESC, id DESC",
+            (company_key,),
+        ).fetchall()
+
+
+def upsert_watchlist_jobs(company_key: str, jobs: list[dict]) -> None:
+    """Insert new jobs and update last_seen for existing ones. Prune jobs unseen for 14+ days."""
+    if not jobs:
+        return
+    today = datetime.now().strftime("%Y-%m-%d")
+    init_db()
+    with _conn() as con:
+        for j in jobs:
+            con.execute(
+                """
+                INSERT INTO watchlist_jobs (company_key, title, job_url, post_date, first_seen, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_url) DO UPDATE SET
+                    last_seen = excluded.last_seen,
+                    title     = CASE WHEN excluded.title != '' THEN excluded.title ELSE title END,
+                    post_date = CASE WHEN excluded.post_date != '' THEN excluded.post_date ELSE post_date END
+                """,
+                (company_key, j.get("title", ""), j.get("url", ""), j.get("date", ""), today, today),
+            )
+        con.execute(
+            "DELETE FROM watchlist_jobs WHERE company_key = ? AND last_seen < date('now', '-14 days')",
+            (company_key,),
+        )
+
+
+def get_watchlist_meta(company_key: str) -> str | None:
+    """Return last_checked timestamp string, or None if never scanned."""
+    init_db()
+    with _conn() as con:
+        row = con.execute(
+            "SELECT last_checked FROM watchlist_meta WHERE company_key = ?",
+            (company_key,),
+        ).fetchone()
+        return row["last_checked"] if row else None
+
+
+def set_watchlist_meta(company_key: str, ts: str) -> None:
+    init_db()
+    with _conn() as con:
+        con.execute(
+            """
+            INSERT INTO watchlist_meta (company_key, last_checked) VALUES (?, ?)
+            ON CONFLICT(company_key) DO UPDATE SET last_checked = excluded.last_checked
+            """,
+            (company_key, ts),
+        )

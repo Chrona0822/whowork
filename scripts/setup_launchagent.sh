@@ -5,43 +5,71 @@
 #   bash setup_launchagent.sh            — first-time install (run once)
 #   bash setup_launchagent.sh restart    — restart both
 #   bash setup_launchagent.sh stop       — stop both
+#   bash setup_launchagent.sh status     — show running status
 #   bash setup_launchagent.sh logs       — tail live logs (both)
 
 BOT_PLIST="$HOME/Library/LaunchAgents/com.whowork.jobbot.plist"
 WEB_PLIST="$HOME/Library/LaunchAgents/com.whowork.webui.plist"
+LOG_DIR="/Users/a1-6/Documents/GitHub/logs"
+PYTHON="/Users/a1-6/miniconda3/envs/whowork/bin/python3"
+
+_bootout() {
+    launchctl bootout gui/$(id -u)/com.whowork.jobbot 2>/dev/null || true
+    launchctl bootout gui/$(id -u)/com.whowork.webui  2>/dev/null || true
+    sleep 1
+}
+
+_bootstrap() {
+    launchctl bootstrap gui/$(id -u) "$BOT_PLIST"
+    launchctl bootstrap gui/$(id -u) "$WEB_PLIST"
+}
 
 _restart_all() {
-    launchctl unload "$BOT_PLIST" 2>/dev/null
-    launchctl unload "$WEB_PLIST" 2>/dev/null
-    launchctl load   "$BOT_PLIST"
-    launchctl load   "$WEB_PLIST"
+    _bootout
+    _bootstrap
+    sleep 2
+    echo "Bot and web UI restarted."
+    echo "Web UI: http://localhost:8080"
+    _status
 }
 
 _stop_all() {
-    launchctl unload "$BOT_PLIST" 2>/dev/null
-    launchctl unload "$WEB_PLIST" 2>/dev/null
+    _bootout
+    echo "Bot and web UI stopped."
+}
+
+_status() {
+    echo ""
+    echo "Service status:"
+    launchctl list | grep whowork | awk '{
+        pid=$1; exit_code=$2; label=$3
+        status = (pid != "-") ? "RUNNING (PID " pid ")" : "STOPPED (last exit: " exit_code ")"
+        printf "  %-30s %s\n", label, status
+    }'
 }
 
 case "${1:-install}" in
 
   restart)
     _restart_all
-    echo "Bot and web UI restarted."
-    echo "Web UI: http://localhost:8080"
     ;;
 
   stop)
     _stop_all
-    echo "Bot and web UI stopped."
+    ;;
+
+  status)
+    _status
     ;;
 
   logs)
-    tail -f /tmp/whowork_bot.log /tmp/whowork_web.log
+    tail -f "$LOG_DIR/whowork_bot.log" "$LOG_DIR/whowork_web.log"
     ;;
 
   install)
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    PYTHON="$(which python3)"
+    SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+    mkdir -p "$LOG_DIR"
 
     # ── Discord bot ────────────────────────────────────────────────────────────
     cat > "$BOT_PLIST" <<EOF
@@ -63,10 +91,12 @@ case "${1:-install}" in
     <true/>
     <key>RunAtLoad</key>
     <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
     <key>StandardOutPath</key>
-    <string>/tmp/whowork_bot.log</string>
+    <string>$LOG_DIR/whowork_bot.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/whowork_bot.log</string>
+    <string>$LOG_DIR/whowork_bot.log</string>
 </dict>
 </plist>
 EOF
@@ -91,29 +121,35 @@ EOF
     <true/>
     <key>RunAtLoad</key>
     <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
     <key>StandardOutPath</key>
-    <string>/tmp/whowork_web.log</string>
+    <string>$LOG_DIR/whowork_web.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/whowork_web.log</string>
+    <string>$LOG_DIR/whowork_web.log</string>
 </dict>
 </plist>
 EOF
 
-    _stop_all
-    _restart_all
+    _bootout
+    _bootstrap
+    sleep 2
 
     echo "Installed and started:"
     echo "  Discord bot → background (check Discord)"
     echo "  Web UI      → http://localhost:8080"
+    echo "  Logs        → $LOG_DIR/"
     echo ""
     echo "Commands:"
-    echo "  bash setup_launchagent.sh restart  — restart both"
-    echo "  bash setup_launchagent.sh stop     — stop both"
-    echo "  bash setup_launchagent.sh logs     — tail live logs"
+    echo "  bash scripts/setup_launchagent.sh restart  — restart both"
+    echo "  bash scripts/setup_launchagent.sh stop     — stop both"
+    echo "  bash scripts/setup_launchagent.sh status   — show status"
+    echo "  bash scripts/setup_launchagent.sh logs     — tail live logs"
+    _status
     ;;
 
   *)
-    echo "Usage: bash setup_launchagent.sh [install|restart|stop|logs]"
+    echo "Usage: bash scripts/setup_launchagent.sh [install|restart|stop|status|logs]"
     ;;
 
 esac

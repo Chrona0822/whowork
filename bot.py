@@ -21,8 +21,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from backend.config import WEB_URL
+
 TOKEN             = os.getenv("DISCORD_TOKEN")
 RESTART_FLAG_FILE = ".restart_channel"   # stores channel ID across restarts
+PID_FILE          = "/tmp/whowork_bot.pid"
+
+
+def _check_single_instance():
+    """Exit immediately if another instance is already running."""
+    if os.path.exists(PID_FILE):
+        try:
+            pid = int(open(PID_FILE).read().strip())
+            os.kill(pid, 0)   # signal 0 = just check if process exists
+            print(f"Another bot instance is already running (PID {pid}). Exiting.")
+            sys.exit(0)
+        except (ProcessLookupError, ValueError):
+            pass  # stale PID file — process is gone, safe to continue
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -164,17 +182,72 @@ async def status_command(ctx):
 @bot.command(name="restart")
 async def restart_command(ctx):
     import subprocess
-    # Restart web UI via launchd
-    web_plist = os.path.expanduser("~/Library/LaunchAgents/com.whowork.webui.plist")
-    if os.path.exists(web_plist):
-        subprocess.run(["launchctl", "unload", web_plist], capture_output=True)
-        subprocess.run(["launchctl", "load",   web_plist], capture_output=True)
+
+    def _restart_web_ui():
+        """Kill existing web UI process, restart via launchd or directly, then
+        wait up to 12 s for port 8080 to accept connections before returning."""
+        import time, urllib.request, signal
+
+        # 1. Kill whatever is holding port 8080
+        result = subprocess.run(
+            ["lsof", "-ti", "tcp:8080"], capture_output=True, text=True
+        )
+        for pid_str in result.stdout.strip().splitlines():
+            try:
+                os.kill(int(pid_str), signal.SIGTERM)
+            except (ProcessLookupError, ValueError):
+                pass
+        time.sleep(1)
+
+        # 2. Try to restart via launchd (clears throttle with bootout first)
+        web_plist = os.path.expanduser("~/Library/LaunchAgents/com.whowork.webui.plist")
+        uid = str(os.getuid())
+        subprocess.run(["launchctl", "bootout", f"gui/{uid}/com.whowork.webui"],
+                       capture_output=True)
+        if os.path.exists(web_plist):
+            subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", web_plist],
+                           capture_output=True)
+
+        # 3. Poll port 8080 for up to 12 s (launchd + Flask startup can be slow)
+        def _port_up() -> bool:
+            try:
+                urllib.request.urlopen("http://localhost:8080/", timeout=2)
+                return True
+            except Exception:
+                return False
+
+        for _ in range(12):
+            time.sleep(1)
+            if _port_up():
+                return  # launchd started it successfully
+
+        # 4. launchd didn't bring it up — launch directly
+        log = "/Users/a1-6/Documents/GitHub/logs/whowork_web.log"
+        web_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web.py")
+        with open(log, "a") as lf:
+            subprocess.Popen([sys.executable, web_py], stdout=lf, stderr=lf,
+                             cwd=os.path.dirname(web_py))
+
+        # 5. Wait for the direct-launched process to be ready
+        for _ in range(10):
+            time.sleep(1)
+            if _port_up():
+                return
+
+    _restart_web_ui()
+
     # Save channel ID so on_ready can confirm when bot is back
     with open(RESTART_FLAG_FILE, "w") as f:
         f.write(str(ctx.channel.id))
     await ctx.send("Restarting everything... I'll confirm when I'm back.")
     await bot.close()
-    sys.exit(0)   # launchd KeepAlive=true restarts the bot automatically
+    # Remove PID file so the new instance isn't blocked
+    try:
+        os.remove(PID_FILE)
+    except FileNotFoundError:
+        pass
+    # Re-exec this script — works whether started by launchd or manually
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 # ── !help ─────────────────────────────────────────────────────────────────────
@@ -227,4 +300,11 @@ async def reset_command(ctx):
 if __name__ == "__main__":
     if not TOKEN:
         raise ValueError("DISCORD_TOKEN not set in .env")
-    bot.run(TOKEN)
+    _check_single_instance()
+    try:
+        bot.run(TOKEN)
+    finally:
+        try:
+            os.remove(PID_FILE)
+        except FileNotFoundError:
+            pass

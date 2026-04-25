@@ -25,12 +25,15 @@ async function setProgress(jobId, selectEl) {
   selectEl.className = "progress-select " + value;
 }
 
-async function enrichRun(runId) {
-  const btn = document.getElementById("enrich-btn");
+async function enrichRun(runId, force = false) {
+  const btn = force
+    ? document.getElementById("re-enrich-btn")
+    : document.getElementById("enrich-btn");
   btn.disabled = true;
   btn.textContent = "⏳ Enriching…";
+  const url = force ? `/enrich/${runId}?force=1` : `/enrich/${runId}`;
   try {
-    const res = await fetch(`/enrich/${runId}`, { method: "POST" });
+    const res = await fetch(url, { method: "POST" });
     const data = await res.json();
     if (data.count === -1) {
       btn.textContent = "⚠ Ollama not running";
@@ -38,10 +41,11 @@ async function enrichRun(runId) {
     } else if (data.count > 0) {
       location.reload();
     } else {
-      btn.textContent = "✓ All enriched";
+      btn.textContent = force ? "↺ Re-enrich" : "✓ All enriched";
+      btn.disabled = false;
     }
   } catch (e) {
-    btn.textContent = "✨ Enrich";
+    btn.textContent = force ? "↺ Re-enrich" : "✨ Enrich";
     btn.disabled = false;
   }
 }

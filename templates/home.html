@@ -71,7 +71,7 @@
         <td class="num-cell">{{ loop.index }}<span class="heart-icon {{ 'fav' if job.favorite }}" onclick="toggleFavorite({{ job.id }}, this)">♥</span></td>
         <td class="title-cell">
           {% if job.job_url %}
-          <a href="{{ job.job_url }}" target="_blank" title="{{ job.title }}">{{ job.title }}</a>
+          <a href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer" title="{{ job.title }}">{{ job.title }}</a>
           {% else %}{{ job.title }}{% endif %}
         </td>
         <td class="company-cell" title="{{ job.company }}">{{ job.company }}</td>

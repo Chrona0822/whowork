@@ -246,13 +246,81 @@ _SU_EXCLUDE_SV = ["professor", "lektor", "adjunkt", "administratör",
                   "koordinator", "ekonom", "jurist", "postdoktor"]
 
 _VARBI_UNIVERSITIES = [
-    ("Stockholm University", "https://su.varbi.com/en/what:rssfeed/",  "Stockholm, Sweden", 1),
-    ("Uppsala University",   "https://uu.varbi.com/en/what:rssfeed/",  "Uppsala, Sweden",   2),
-    ("Lund University",      "https://lu.varbi.com/en/what:rssfeed/",  "Lund, Sweden",      2),
+    ("Stockholm University", "https://su.varbi.com/en/what:rssfeed/",  "Stockholm, Sweden",  1),
+    ("Uppsala University",   "https://uu.varbi.com/en/what:rssfeed/",  "Uppsala, Sweden",    2),
+    ("Lund University",      "https://lu.varbi.com/en/what:rssfeed/",  "Lund, Sweden",       2),
+    ("Aarhus University",    "https://au.varbi.com/en/what:rssfeed/",  "Aarhus, Denmark",    2),
 ]
 _ENGLISH_UNI_FEEDS = [
     ("Linköping University", "https://liu.se/rss/liu-jobs-en.rss", "Linköping, Sweden", 2),
 ]
+
+# ── University of Copenhagen (KU) ─────────────────────────────────────────────
+# Note: DTU (dtu.dk) uses Oracle Cloud HCM (JS-rendered SPA) and cannot be
+# scraped without a headless browser — skipped for now.
+
+# KU positions cover all faculties; restrict to CS/ML/data topics only.
+_KU_CS_KEYWORDS = [
+    "computer science", "computer", "software", "machine learning",
+    " ml ", "ml-", "artificial intelligence", " ai ", "deep learning",
+    "neural", "natural language", "nlp", "data science", "data-driven",
+    "algorithm", "computational", "robotics", "cybersecurity", "security",
+    "bioinformatics", "network", "distributed systems", "cloud",
+    "quantitative", "statistics", "programming",
+]
+
+def _is_ku_cs(title: str) -> bool:
+    t = title.lower()
+    return any(kw in t for kw in _KU_CS_KEYWORDS)
+
+
+def search_ku() -> pd.DataFrame:
+    """Scrape open PhD/research positions from University of Copenhagen.
+    Only returns positions related to computer science / ML / data."""
+    try:
+        resp = requests.get(
+            "https://employment.ku.dk/phd/?pagelen=9999",
+            timeout=RSS_TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0"},
+            verify=False,
+        )
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "html.parser")
+        rows = []
+        for a in soup.select("a[href]"):
+            title = a.get_text(strip=True)
+            if not title or len(title) < 8:
+                continue
+            if not is_relevant(title):
+                continue
+            if not _is_ku_cs(title):
+                continue
+            href = a["href"]
+            if not href.startswith("http"):
+                href = "https://employment.ku.dk" + href
+            if "employment.ku.dk" not in href:
+                continue
+            rows.append({
+                "title":             title,
+                "company":           "University of Copenhagen",
+                "location":          "Copenhagen, Denmark",
+                "job_url":           href,
+                "date_posted":       "",
+                "deadline":          "",
+                "site":              "ku",
+                "location_priority": 2,
+                "search_query":      "ku",
+            })
+        seen_urls: set = set()
+        unique = []
+        for r in rows:
+            if r["job_url"] not in seen_urls:
+                seen_urls.add(r["job_url"])
+                unique.append(r)
+        return pd.DataFrame(unique) if unique else pd.DataFrame()
+    except Exception as e:
+        print(f"  [ku] {e}")
+        return pd.DataFrame()
 
 
 def _is_relevant_su(title: str) -> bool:
@@ -303,14 +371,15 @@ def _search_varbi(name: str, rss_url: str, location: str, loc_priority: int) -> 
 
 
 def search_uni_feeds() -> pd.DataFrame:
-    """Fetch all configured university RSS feeds in parallel."""
+    """Fetch all configured university RSS feeds + University of Copenhagen in parallel."""
     all_feeds = _VARBI_UNIVERSITIES + _ENGLISH_UNI_FEEDS
     frames = []
-    with ThreadPoolExecutor(max_workers=len(all_feeds)) as pool:
-        futures = {
+    with ThreadPoolExecutor(max_workers=len(all_feeds) + 1) as pool:
+        futures: dict = {
             pool.submit(_search_varbi, name, url, loc, pri): name
             for name, url, loc, pri in all_feeds
         }
+        futures[pool.submit(search_ku)] = "ku"
         for future in as_completed(futures):
             df = future.result()
             if not df.empty:
