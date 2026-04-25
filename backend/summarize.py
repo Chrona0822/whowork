@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from bs4 import BeautifulSoup
 
-from backend.db import get_jobs, save_summary
+from backend.db import clear_descriptions, clear_summaries, get_jobs, save_summary
 
 OLLAMA_URL      = "http://localhost:11434/api/generate"
 OLLAMA_MODEL    = "llama3.2:1b"
@@ -103,7 +103,7 @@ def _is_swedish(text: str) -> bool:
 
 _PROMPT_TEMPLATE = """\
 {lang_instruction}Extract key info from this job posting and return ONLY a JSON object with these fields:
-- "years_exp": required experience as a short string (e.g. "2+ years", "No experience", "PhD required", "N/A")
+- "years_exp": required experience as a short string (e.g. "2+ years", "No experience required", "N/A"). Only use "PhD required" if the text explicitly states a PhD or doctorate is required.
 - "tech_stack": array of up to 5 key technologies or skills
 - "level": one of "Junior", "Mid", "Senior", "PhD/Research", "Any"
 
@@ -142,6 +142,14 @@ def _ollama_one(job_id: int, title: str, desc: str) -> tuple[int, dict]:
         data = json.loads(text)
         if swedish:
             data["lang"] = "sv"
+        # Guard against hallucinated PhD tags: only keep if the raw description
+        # actually contains "phd" or "doctoral" (model often hallucinates this
+        # for ML-heavy roles that don't require a doctorate).
+        years = data.get("years_exp", "")
+        if years and "phd" in years.lower():
+            desc_lower = desc.lower()
+            if "phd" not in desc_lower and "doctoral" not in desc_lower and "doctorate" not in desc_lower:
+                data["years_exp"] = "N/A"
         return job_id, data
     except requests.ConnectionError:
         print("  [summarize] Ollama not running — start with: ollama serve")
@@ -159,9 +167,12 @@ def _ollama_reachable() -> bool:
         return False
 
 
-def enrich_run(run_id: int) -> int:
+def enrich_run(run_id: int, force: bool = False) -> int:
     """Summarize all un-summarized jobs in a run.
+    If force=True, clears existing summaries and re-runs all jobs.
     Returns count saved, 0 if nothing to enrich, or -1 if Ollama is unreachable."""
+    if force:
+        clear_summaries(run_id)
     jobs = [j for j in get_jobs(run_id) if j["job_url"] and not j["summary"]]
     if not jobs:
         return 0
@@ -189,6 +200,7 @@ def enrich_run(run_id: int) -> int:
                     fetched.append((j["id"], j["title"], desc))
 
     # Phase 2: send to Ollama in parallel
+    enriched_ids = {job_id for job_id, _, _ in fetched}
     saved = 0
     with ThreadPoolExecutor(max_workers=_OLLAMA_WORKERS) as pool:
         ollama_futures = {
@@ -198,7 +210,12 @@ def enrich_run(run_id: int) -> int:
         for future in as_completed(ollama_futures):
             job_id, data = future.result()
             if data:
-                save_summary(job_id, json.dumps(data))
+                save_summary(job_id, json.dumps(data))  # also clears description
                 saved += 1
+
+    # Clear descriptions for jobs that had no fetchable content (free up space)
+    failed_ids = enriched_ids - {j["id"] for j in jobs if j["summary"]}
+    if failed_ids:
+        clear_descriptions(list(failed_ids))
 
     return saved

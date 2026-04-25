@@ -46,6 +46,9 @@ LOCATIONS = [
     {"city": "Malmö",      "country": "Sweden",      "indeed_country": "Sweden",      "priority": 1},
     # Denmark
     {"city": "Copenhagen", "country": "Denmark",     "indeed_country": "Denmark",     "priority": 2},
+    # Belgium
+    {"city": "Brussels",   "country": "Belgium",     "indeed_country": "Belgium",     "priority": 3},
+    {"city": "Antwerp",    "country": "Belgium",     "indeed_country": "Belgium",     "priority": 3},
     # Germany
     {"city": "Berlin",     "country": "Germany",     "indeed_country": "Germany",     "priority": 3},
     {"city": "Munich",     "country": "Germany",     "indeed_country": "Germany",     "priority": 3},
@@ -86,6 +89,10 @@ SWEDEN_CITY_PRIORITY = {
     "göteborg":   2,
     "malmö":      3,
     "malmo":      3,
+    "copenhagen": 4,
+    "københavn":  4,
+    "aarhus":     5,
+    "århus":      5,
 }
 
 # ── Tuning ─────────────────────────────────────────────────────────────────────

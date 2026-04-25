@@ -14,7 +14,7 @@
   {% if has_api_key %}
   <button
     id="enrich-btn"
-    onclick="enrichRun({{ selected.id }})"
+    onclick="enrichRun({{ selected.id }}, false)"
     style="
       padding: 4px 12px;
       border: 1px solid #c4b5fd;
@@ -27,6 +27,23 @@
     "
   >
     ✨ Enrich
+  </button>
+  <button
+    id="re-enrich-btn"
+    onclick="enrichRun({{ selected.id }}, true)"
+    style="
+      padding: 4px 12px;
+      border: 1px solid #a78bfa;
+      border-radius: 5px;
+      background: #fff;
+      color: #7c3aed;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    "
+    title="Clear existing summaries and re-run all jobs"
+  >
+    ↺ Re-enrich
   </button>
   {% endif %}
   <form
@@ -147,7 +164,7 @@
         </td>
         <td class="title-cell">
           {% if job.job_url %}
-          <a href="{{ job.job_url }}" target="_blank" title="{{ job.title }}">{{ job.title }}</a>
+          <a href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer" title="{{ job.title }}">{{ job.title }}</a>
           {% else %}
           <span title="{{ job.title }}">{{ job.title }}</span>
           {% endif %}
@@ -185,7 +202,14 @@
           <br /><span style="font-size: 11px; color: #b45309" title="Application deadline">↯ {{ job.deadline }}</span>
           {% endif %}
         </td>
-        <td style="color: #aaa">{{ job.site }}</td>
+        <td style="color: #aaa">
+          {{ job.site }}
+          {% if job.extra_sites %}
+          {% for s in job.extra_sites %}
+          <span title="Also found on {{ s }}" style="font-size: 10px; background: #f3e8ff; color: #7c3aed; border-radius: 3px; padding: 1px 4px; margin-left: 2px;">+{{ s }}</span>
+          {% endfor %}
+          {% endif %}
+        </td>
         {% if filter_mode == 'applied' %}
         <td class="action-cell">
           <select class="progress-select {{ job.progress }}" onchange="setProgress({{ job.id }}, this)">

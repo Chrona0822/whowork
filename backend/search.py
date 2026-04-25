@@ -150,7 +150,11 @@ def run_search(
     seen.update(new_jobs["job_hash"].tolist())
     save_seen_jobs(seen)
 
-    output_cols = ["title", "company", "location", "date_posted", "site", "job_url"]
+    output_cols = ["title", "company", "location", "date_posted", "deadline", "site", "job_url", "description"]
     output = new_jobs[[c for c in output_cols if c in new_jobs.columns]].reset_index(drop=True)
+
+    # Truncate descriptions — Ollama only reads ~1500 chars, no need to store more
+    if "description" in output.columns:
+        output["description"] = output["description"].fillna("").str[:2000]
 
     return output, len(output)

@@ -12,6 +12,9 @@
       <a class="home-link {% if page == 'home' %}active{% endif %}" href="/">
         🏠 Home
       </a>
+      <a class="home-link {% if page == 'favourite' %}active{% endif %}" href="/favourite">
+        ★ Favourites
+      </a>
       <div class="section-label">Search Runs</div>
       {% for run in runs %}
       <a
