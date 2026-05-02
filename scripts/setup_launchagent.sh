@@ -10,7 +10,7 @@
 
 BOT_PLIST="$HOME/Library/LaunchAgents/com.whowork.jobbot.plist"
 WEB_PLIST="$HOME/Library/LaunchAgents/com.whowork.webui.plist"
-LOG_DIR="/Users/a1-6/Documents/GitHub/logs"
+LOG_DIR="$HOME/Library/Logs/whowork"
 PYTHON="/Users/a1-6/miniconda3/envs/whowork/bin/python3"
 
 _bootout() {
