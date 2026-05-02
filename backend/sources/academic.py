@@ -1,10 +1,12 @@
 """
 Academic / research job sources:
-  - Euraxess  (RSS — may be blocked by Cloudflare)
+  - Euraxess   (RSS — may be blocked by Cloudflare)
   - jobs.ac.uk (RSS — may return 500 intermittently)
-  - KTH       (Royal Institute of Technology — HTML + detail-page scrape)
-  - Varbi     (Stockholm, Uppsala, Lund universities RSS)
-  - LiU       (Linköping University RSS)
+  - KTH        (Royal Institute of Technology — HTML + detail-page scrape)
+  - Varbi      (Stockholm, Uppsala, Lund universities RSS)
+  - LiU        (Linköping University RSS)
+  - KU/DIKU    (Dept. of Computer Science, Univ. of Copenhagen — HTML scrape)
+  - AU PhD     (Aarhus Grad School — Computer Science programme only, HTML scrape)
 """
 
 import json
@@ -249,57 +251,41 @@ _VARBI_UNIVERSITIES = [
     ("Stockholm University", "https://su.varbi.com/en/what:rssfeed/",  "Stockholm, Sweden",  1),
     ("Uppsala University",   "https://uu.varbi.com/en/what:rssfeed/",  "Uppsala, Sweden",    2),
     ("Lund University",      "https://lu.varbi.com/en/what:rssfeed/",  "Lund, Sweden",       2),
-    ("Aarhus University",    "https://au.varbi.com/en/what:rssfeed/",  "Aarhus, Denmark",    2),
+    # Aarhus University: use search_au_phd() — filters specifically on Computer Science programme
 ]
 _ENGLISH_UNI_FEEDS = [
     ("Linköping University", "https://liu.se/rss/liu-jobs-en.rss", "Linköping, Sweden", 2),
 ]
 
-# ── University of Copenhagen (KU) ─────────────────────────────────────────────
+# ── University of Copenhagen — Department of Computer Science (DIKU) ──────────
 # Note: DTU (dtu.dk) uses Oracle Cloud HCM (JS-rendered SPA) and cannot be
 # scraped without a headless browser — skipped for now.
 
-# KU positions cover all faculties; restrict to CS/ML/data topics only.
-_KU_CS_KEYWORDS = [
-    "computer science", "computer", "software", "machine learning",
-    " ml ", "ml-", "artificial intelligence", " ai ", "deep learning",
-    "neural", "natural language", "nlp", "data science", "data-driven",
-    "algorithm", "computational", "robotics", "cybersecurity", "security",
-    "bioinformatics", "network", "distributed systems", "cloud",
-    "quantitative", "statistics", "programming",
-]
-
-def _is_ku_cs(title: str) -> bool:
-    t = title.lower()
-    return any(kw in t for kw in _KU_CS_KEYWORDS)
-
-
 def search_ku() -> pd.DataFrame:
-    """Scrape open PhD/research positions from University of Copenhagen.
-    Only returns positions related to computer science / ML / data."""
+    """Scrape open positions from DIKU (Dept. of Computer Science, KU).
+    Uses the department vacancies page — already scoped to DIKU, no title filter needed."""
     try:
         resp = requests.get(
-            "https://employment.ku.dk/phd/?pagelen=9999",
+            "https://di.ku.dk/english/about/vacancies/",
             timeout=RSS_TIMEOUT,
             headers={"User-Agent": "Mozilla/5.0"},
-            verify=False,
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.content, "html.parser")
         rows = []
-        for a in soup.select("a[href]"):
+        seen_urls: set = set()
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "employment.ku.dk" not in href:
+                continue
             title = a.get_text(strip=True)
             if not title or len(title) < 8:
                 continue
             if not is_relevant(title):
                 continue
-            if not _is_ku_cs(title):
+            if href in seen_urls:
                 continue
-            href = a["href"]
-            if not href.startswith("http"):
-                href = "https://employment.ku.dk" + href
-            if "employment.ku.dk" not in href:
-                continue
+            seen_urls.add(href)
             rows.append({
                 "title":             title,
                 "company":           "University of Copenhagen",
@@ -311,15 +297,79 @@ def search_ku() -> pd.DataFrame:
                 "location_priority": 2,
                 "search_query":      "ku",
             })
-        seen_urls: set = set()
-        unique = []
-        for r in rows:
-            if r["job_url"] not in seen_urls:
-                seen_urls.add(r["job_url"])
-                unique.append(r)
-        return pd.DataFrame(unique) if unique else pd.DataFrame()
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
     except Exception as e:
         print(f"  [ku] {e}")
+        return pd.DataFrame()
+
+
+# ── Aarhus University PhD — Computer Science programme (phd.nat.au.dk) ────────
+
+def search_au_phd() -> pd.DataFrame:
+    """Scrape open PhD calls from Aarhus Grad School of Natural Sciences.
+    Only returns positions where programme = Computer Science."""
+    url = "https://phd.nat.au.dk/for-applicants/open-calls/"
+    try:
+        resp = requests.get(url, timeout=RSS_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "html.parser")
+        rows = []
+        seen_urls: set = set()
+
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if not href.startswith("http"):
+                href = "https://phd.nat.au.dk" + href
+            # Only specific call detail pages (not the listing page itself or nav links)
+            if "open-calls" not in href or href.rstrip("/") == url.rstrip("/"):
+                continue
+            title = a.get_text(strip=True)
+            if not title or len(title) < 10:
+                continue
+            if href in seen_urls:
+                continue
+
+            # Walk up DOM to find a container that mentions the programme
+            container = a.parent
+            cs_found = False
+            for _ in range(5):
+                if container is None:
+                    break
+                if "computer science" in container.get_text(" ", strip=True).lower():
+                    cs_found = True
+                    break
+                container = container.parent
+            if not cs_found:
+                continue
+
+            seen_urls.add(href)
+
+            dl = ""
+            if container is not None:
+                dl_m = re.search(
+                    r"\b(\d{1,2}[\s./]+(?:january|february|march|april|may|june|july"
+                    r"|august|september|october|november|december)[\s./]+\d{4}"
+                    r"|\d{4}-\d{2}-\d{2})\b",
+                    container.get_text(" ", strip=True),
+                    re.I,
+                )
+                dl = _normalize_date(dl_m.group(1)) if dl_m else ""
+
+            rows.append({
+                "title":             title,
+                "company":           "Aarhus University",
+                "location":          "Aarhus, Denmark",
+                "job_url":           href,
+                "date_posted":       "",
+                "deadline":          dl,
+                "site":              "au_phd",
+                "location_priority": 2,
+                "search_query":      "au_phd",
+            })
+
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
+    except Exception as e:
+        print(f"  [au_phd] {e}")
         return pd.DataFrame()
 
 
@@ -371,15 +421,17 @@ def _search_varbi(name: str, rss_url: str, location: str, loc_priority: int) -> 
 
 
 def search_uni_feeds() -> pd.DataFrame:
-    """Fetch all configured university RSS feeds + University of Copenhagen in parallel."""
+    """Fetch all configured university feeds in parallel.
+    Includes: Varbi RSS (SU/UU/LU), LiU RSS, DIKU (KU CS dept), Aarhus PhD CS."""
     all_feeds = _VARBI_UNIVERSITIES + _ENGLISH_UNI_FEEDS
     frames = []
-    with ThreadPoolExecutor(max_workers=len(all_feeds) + 1) as pool:
+    with ThreadPoolExecutor(max_workers=len(all_feeds) + 2) as pool:
         futures: dict = {
             pool.submit(_search_varbi, name, url, loc, pri): name
             for name, url, loc, pri in all_feeds
         }
-        futures[pool.submit(search_ku)] = "ku"
+        futures[pool.submit(search_ku)]     = "ku"
+        futures[pool.submit(search_au_phd)] = "au_phd"
         for future in as_completed(futures):
             df = future.result()
             if not df.empty:
